@@ -1,0 +1,63 @@
+name: Repair and test bundled R package (Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/repair-linux.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+      - name: Retrieve previously compiled Julia bundle
+        run: |
+          curl --fail --location --retry 3 \
+            --output /tmp/PMLCFAEFA_0.1.0.tar.gz \
+            https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.0/PMLCFAEFA_0.1.0.tar.gz
+          mkdir -p /tmp/pml-repair
+          tar -xzf /tmp/PMLCFAEFA_0.1.0.tar.gz -C /tmp/pml-repair
+          test -f /tmp/pml-repair/PMLCFAEFA/inst/julia/lib/libpmlr.so
+      - name: Replace R interface and add isolated runner
+        run: |
+          set -euo pipefail
+          pkg=/tmp/pml-repair/PMLCFAEFA
+          cp Rpkg/DESCRIPTION Rpkg/NAMESPACE "$pkg/"
+          cp Rpkg/R/* "$pkg/R/"
+          cp Rpkg/src/* "$pkg/src/"
+          cp Rpkg/man/* "$pkg/man/"
+          mkdir -p "$pkg/inst/julia/bin"
+          cc -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra \
+            -o "$pkg/inst/julia/bin/pmlr-runner" julia/pmlr-runner.c -ldl
+          chmod +x "$pkg/inst/julia/bin/pmlr-runner"
+          grep '^Version: 0.1.1$' "$pkg/DESCRIPTION"
+          cd /tmp/pml-repair
+          tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.1.tar.gz" PMLCFAEFA
+      - name: Install repaired R package
+        run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
+      - name: Verify isolated runner with an actual model fit
+        run: Rscript scripts/smoke.R
+      - name: Upload tested archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PMLCFAEFA-linux-repaired
+          path: PMLCFAEFA_0.1.1.tar.gz
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v0.1.1 >/dev/null 2>&1 || \
+            gh release create v0.1.1 --target "$GITHUB_SHA" \
+              --title "PMLCFAEFA 0.1.1 Linux" \
+              --notes "R interface runs the original compiled Julia model in a separate process. Experimental: numerical equivalence not yet confirmed."
+          gh release upload v0.1.1 PMLCFAEFA_0.1.1.tar.gz --clobber
