@@ -1,0 +1,4 @@
+useDynLib(PMLCFAEFA, .registration=TRUE)
+export(PMLcfaefa)
+export(PMLR_status)
+S3method(print, pmlcfaefa_fit)
