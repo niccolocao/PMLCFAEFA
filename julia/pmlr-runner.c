@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     fclose(in);
     fprintf(stderr, "[pmlr] parsed inputs n=%d p=%d q=%d K=%d\n", n, p, q, k); fflush(stderr);
     fprintf(stderr, "[pmlr] loading Julia libraries\n"); fflush(stderr);
-    load_library(argv[1], "lib/libjulia.so");
+    void *runtime = load_library(argv[1], "lib/libjulia.so");
     void *model = load_library(argv[1], "lib/libpmlr.so");
     init_julia_fn init_julia = (init_julia_fn)require_symbol(model, "init_julia");
     fit_fn fit = (fit_fn)require_symbol(model, "pmlr_fit");
@@ -104,6 +104,20 @@ int main(int argc, char **argv) {
     fprintf(stderr, "[pmlr] initializing Julia\n"); fflush(stderr);
     init_julia(1, julia_argv);
     fprintf(stderr, "[pmlr] Julia initialization returned\n"); fflush(stderr);
+    typedef void *(*julia_eval_fn)(const char *);
+    typedef void *(*julia_exception_fn)(void);
+    julia_eval_fn eval_julia = (julia_eval_fn)dlsym(runtime, "jl_eval_string");
+    julia_exception_fn julia_exception = (julia_exception_fn)dlsym(runtime, "jl_exception_occurred");
+    if (!eval_julia || !julia_exception) {
+        fprintf(stderr, "Julia C API is missing evaluation functions\n");
+        return 3;
+    }
+    eval_julia("import Optim; if !isdefined(Optim, :only_fg!); Core.eval(Optim, :(using NLSolversBase: only_fg!)); end");
+    if (julia_exception() != NULL) {
+        fprintf(stderr, "Cannot activate Optim/NLSolversBase compatibility alias\n");
+        return 3;
+    }
+    fprintf(stderr, "[pmlr] Optim compatibility alias ready\n"); fflush(stderr);
     fprintf(stderr, "[pmlr] invoking Julia pmlr_fit\n"); fflush(stderr);
     int32_t code = fit(x, cov, n, p, q, k, c, ncov, tol, maxit, maxrest,
                        replix, fix, latent, loading, has_l);

@@ -12,6 +12,7 @@ for name in ("MixCFAEFA.jl", "Sgr.jl", "PMLCFAEFA.jl")
         dependency_import = "using MixCFAEFA, Sgr,"
         occursin(dependency_import, source) || error("Cannot find module imports")
         source = replace(source, dependency_import => "using ..MixCFAEFA, ..Sgr,"; count=1)
+        source = replace(source, "Optim.only_fg!" => "Optim.NLSolversBase.only_fg!")
 
         restart_loop = "while code_error == 0.0\n"
         occursin(restart_loop, source) || error("Cannot find restart loop")

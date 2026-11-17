@@ -45,7 +45,7 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.1.tar.gz" PMLCFAEFA
       - name: Install repaired R package
         run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
-      - name: Verify model with bundled Julia runtime libraries
+      - name: Verify Optim compatibility and model with bundled libraries
         run: |
           test -f "$(Rscript -e 'cat(system.file("julia",package="PMLCFAEFA"))')/lib/julia/libunwind.so.8"
           Rscript scripts/smoke.R
