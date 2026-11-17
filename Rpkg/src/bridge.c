@@ -71,6 +71,13 @@ SEXP C_pmlr_init(SEXP rootS) {
 #else
     libpath(path, sizeof(path), root, "lib/libjulia.so");
 #endif
+#ifndef __APPLE__
+    char unwind_path[8192];
+    libpath(unwind_path, sizeof(unwind_path), root, "lib/julia/libunwind.so.8");
+    void *bundled_unwind = dlopen(unwind_path, RTLD_NOW | RTLD_GLOBAL);
+    if (!bundled_unwind)
+        Rf_error("Cannot load Julia's bundled unwinder: %s", dlerror());
+#endif
     julia_runtime = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     if (!julia_runtime)
         Rf_error("Cannot load Julia runtime: %s", dlerror());
@@ -95,6 +102,18 @@ SEXP C_pmlr_init(SEXP rootS) {
     char arg0[] = "R";
     char *argv[] = {arg0, NULL};
     init_julia_ptr(1, argv);
+
+#ifndef _WIN32
+    typedef void *(*jl_eval_fn)(const char *);
+    typedef void *(*jl_exc_fn)(void);
+    jl_eval_fn jl_eval = (jl_eval_fn)dlsym(julia_runtime, "jl_eval_string");
+    jl_exc_fn jl_exc = (jl_exc_fn)dlsym(julia_runtime, "jl_exception_occurred");
+    if (!jl_eval || !jl_exc)
+        Rf_error("Julia runtime is missing C API evaluation symbols");
+    jl_eval("let mods = values(Base.loaded_modules); opt = first(m for m in mods if nameof(m) === :Optim); nls = first(m for m in mods if nameof(m) === :NLSolversBase); if !isdefined(opt, :only_fg!); f = getfield(nls, :only_fg!); Core.eval(opt, :(const only_fg! = $f)); end; end");
+    if (jl_exc())
+        Rf_error("Could not initialize compiled Optim compatibility support");
+#endif
     initialized = 1;
     return ScalarLogical(1);
 }

@@ -1,0 +1,48 @@
+name: Validate in-process R and Julia (Linux)
+
+on:
+  push:
+    branches:
+      - inprocess-r-interface
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+      - name: Download the last verified Julia bundle
+        run: |
+          curl --fail --location --retry 3 \
+            --output /tmp/PMLCFAEFA_0.1.1.tar.gz \
+            https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.1/PMLCFAEFA_0.1.1.tar.gz
+          mkdir -p /tmp/pml-inprocess
+          tar -xzf /tmp/PMLCFAEFA_0.1.1.tar.gz -C /tmp/pml-inprocess
+      - name: Package R interface running Julia inside R
+        run: |
+          set -euo pipefail
+          pkg=/tmp/pml-inprocess/PMLCFAEFA
+          cp Rpkg/DESCRIPTION Rpkg/NAMESPACE "$pkg/"
+          cp Rpkg/R/PMLcfaefa.R "$pkg/R/"
+          cp Rpkg/src/* "$pkg/src/"
+          cp Rpkg/man/* "$pkg/man/"
+          rm -f "$pkg/R/isolated.R" "$pkg/inst/julia/bin/pmlr-runner"
+          grep '^Version: 0.1.2$' "$pkg/DESCRIPTION"
+          cd /tmp/pml-inprocess
+          tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.2.tar.gz" PMLCFAEFA
+      - name: Install R package
+        run: R CMD INSTALL PMLCFAEFA_0.1.2.tar.gz
+      - name: Execute real model in R process
+        run: Rscript scripts/smoke.R
+      - name: Upload candidate archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PMLCFAEFA-inprocess-candidate
+          path: PMLCFAEFA_0.1.2.tar.gz

@@ -65,12 +65,11 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
       !(latentmeans %in% c(0, 1, 2)))
     stop("Unsupported latentmeans/fixthrehsolds combination.", call. = FALSE)
 
-  raw <- .pmlr_run_isolated(
-    X, ics, as.integer(q), as.integer(K), as.integer(c),
-    as.double(tol), as.integer(maxit), as.integer(maxNumRestart),
-    as.integer(replix), as.double(fixthrehsolds), loading,
-    as.double(latentmeans)
-  )
+  .pmlr_initialize()
+  raw <- .Call(C_pmlr_fit, X, ics, as.integer(q), as.integer(K),
+               as.integer(c), as.double(tol), as.integer(maxit),
+               as.integer(maxNumRestart), as.integer(replix),
+               as.double(fixthrehsolds), loading, as.double(latentmeans))
   structure(list(raw = raw, status_code = raw[length(raw) - 1L],
                  restart_count = raw[length(raw)],
                  n = nrow(X), p = ncol(X), q = q, K = K, c = c),

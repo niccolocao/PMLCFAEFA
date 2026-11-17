@@ -1,6 +1,7 @@
 library(PMLCFAEFA)
-stopifnot(PMLR_status()$bundle_present, PMLR_status()$runner_present)
-cat("Compiled Julia bundle and isolated runner found.\n")
+stopifnot(PMLR_status()$bundle_present)
+cat("Compiled Julia bundle found.\n")
+stopifnot(!any(grepl("pmlr_run_isolated", deparse(body(PMLcfaefa)), fixed = TRUE)))
 
 set.seed(511)
 n <- 120L
@@ -10,7 +11,7 @@ X <- replicate(5, {
                  breaks = c(-Inf, -0.8, 0, 0.8, Inf)))
 })
 
-cat("Testing an actual model fit in the isolated runner.\n")
+cat("Testing an actual in-process native Julia model fit.\n")
 fit <- PMLcfaefa(
   X, q = 1L, K = 1L, c = 4L,
   ics = matrix(1, n, 1),
