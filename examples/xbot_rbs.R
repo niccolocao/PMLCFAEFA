@@ -1,6 +1,6 @@
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 remotes::install_github("CTN-0094/public.ctn0094data")
-remotes::install_url("https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.0/PMLCFAEFA_0.1.0.tar.gz")
+remotes::install_url("https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.1/PMLCFAEFA_0.1.1.tar.gz")
 
 library(PMLCFAEFA)
 data("everybody", package = "public.ctn0094data")
