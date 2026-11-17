@@ -112,8 +112,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Julia C API is missing evaluation functions\n");
         return 3;
     }
-    eval_julia("try; Core.eval(Main, :(import Optim)); if !isdefined(Optim, :only_fg!); Core.eval(Optim, :(using NLSolversBase: only_fg!)); end; catch e; Base.showerror(stderr, e, catch_backtrace()); println(stderr); end");
-    eval_julia("isdefined(Optim, :only_fg!) || error(\"Optim.only_fg! compatibility shim did not register\")");
+    eval_julia("try; let mods = values(Base.loaded_modules); opt = first(m for m in mods if nameof(m) === :Optim); nls = first(m for m in mods if nameof(m) === :NLSolversBase); if !isdefined(opt, :only_fg!); f = getfield(nls, :only_fg!); Core.eval(opt, :(const only_fg! = $f)); end; end; catch e; Base.showerror(stderr, e, catch_backtrace()); println(stderr); end");
+    eval_julia("any(m -> nameof(m) === :Optim && isdefined(m, :only_fg!), values(Base.loaded_modules)) || error(\"Optim.only_fg! compatibility shim did not register\")");
     if (julia_exception() != NULL) {
         fprintf(stderr, "Cannot activate Optim/NLSolversBase compatibility alias\n");
         return 3;
