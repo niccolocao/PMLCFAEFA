@@ -77,22 +77,14 @@ returns the original flattened numeric result in `fit$raw`, plus a
 Parameter extraction should be implemented only after each model branch has
 been checked for consistent output indexing.
 
-## Create a private GitHub repository
+## Build through GitHub Actions
 
-From an authenticated GitHub CLI session, at the repository root:
-
-```bash
-gh auth login
-git init
-git add .
-git commit -m "Initial R bridge for compiled Julia PMLCFAEFA"
-gh repo create PMLCFAEFA-R --private --source=. --remote=origin --push
-```
-
-Run **Actions → Build Julia library and R package (Linux) → Run workflow**.
-Download the resulting archive from the workflow artifact page after a
-successful run. Please keep the repository private until a suitable source
-license is chosen and the original Julia code is audited.
+The repository lives at https://github.com/niccolocao/PMLCFAEFA and retains
+its existing GPL license. Use **Actions → Build Julia library and R package
+(Linux) → Run workflow**. After a successful run, download the
+`PMLCFAEFA-linux-r-package` artifact and install the bundled R archive on a
+compatible 64-bit Linux system. The bundle includes the Julia runtime and
+does not require a separate Julia installation.
 
 ## Design limitations
 

@@ -3,6 +3,8 @@ name: Build Julia library and R package (Linux)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
