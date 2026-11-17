@@ -51,7 +51,7 @@
   status <- attr(log, "status")
   if (is.null(status)) status <- 0L
   if (status != 0L || !file.exists(output)) {
-    diagnostic <- paste(tail(log, 30L), collapse = "\n")
+    diagnostic <- paste(c(head(log, 65L), tail(log, 65L)), collapse = "\n")
     stop(sprintf("Compiled Julia model failed (exit code %s):\n%s",
                  status, diagnostic), call. = FALSE)
   }

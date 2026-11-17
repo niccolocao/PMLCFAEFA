@@ -47,7 +47,7 @@ jobs:
         run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
       - name: Install debugger for native crash diagnosis
         run: sudo apt-get update -qq && sudo apt-get install -y -qq gdb
-      - name: Verify isolated runner with an actual model fit under gdb
+      - name: Capture full gdb crash details during actual Julia model fit
         env:
           PMLR_DEBUG_GDB: '1'
         run: Rscript scripts/smoke.R
