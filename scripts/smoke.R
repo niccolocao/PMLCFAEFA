@@ -1,0 +1,5 @@
+library(PMLCFAEFA)
+stopifnot(PMLR_status()$bundle_present)
+cat("Bundle is present.\n")
+PMLCFAEFA:::.pmlr_initialize()
+cat("Julia runtime initialized in the R process.\n")

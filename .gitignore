@@ -1,0 +1,7 @@
+julia/PMLRBridge/Manifest.toml
+julia/PMLRBridge/src/model/
+Rpkg/inst/julia/
+PMLCFAEFA_*.tar.gz
+.Rhistory
+.RData
+.DS_Store
