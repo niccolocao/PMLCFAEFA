@@ -33,9 +33,20 @@
   )
 
   message("Running PMLCFAEFA in a separate process. RStudio will remain open if Julia crashes.")
+  debug <- identical(Sys.getenv("PMLR_DEBUG_GDB"), "1")
+  if (debug) {
+    gdb <- Sys.which("gdb")
+    if (!nzchar(gdb)) stop("gdb is required for PMLR_DEBUG_GDB=1", call. = FALSE)
+    executable <- gdb
+    arguments <- c("-q", "-batch", "-ex", shQuote("set pagination off"),
+                   "-ex", "run", "-ex", shQuote("bt full"), "--args",
+                   shQuote(c(runner, root, input, output)))
+  } else {
+    executable <- runner
+    arguments <- shQuote(c(root, input, output))
+  }
   log <- suppressWarnings(
-    system2(runner, args = shQuote(c(root, input, output)),
-            stdout = TRUE, stderr = TRUE)
+    system2(executable, args = arguments, stdout = TRUE, stderr = TRUE)
   )
   status <- attr(log, "status")
   if (is.null(status)) status <- 0L

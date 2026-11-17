@@ -45,7 +45,11 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.1.tar.gz" PMLCFAEFA
       - name: Install repaired R package
         run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
-      - name: Verify isolated runner with an actual model fit
+      - name: Install debugger for native crash diagnosis
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gdb
+      - name: Verify isolated runner with an actual model fit under gdb
+        env:
+          PMLR_DEBUG_GDB: '1'
         run: Rscript scripts/smoke.R
       - name: Upload tested archive
         uses: actions/upload-artifact@v4
