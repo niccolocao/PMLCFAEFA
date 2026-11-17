@@ -12,7 +12,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -33,3 +33,9 @@ jobs:
         with:
           name: PMLCFAEFA-linux-r-package
           path: PMLCFAEFA_0.1.0.tar.gz
+      - name: Publish Linux archive on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v0.1.0 >/dev/null 2>&1 || gh release create v0.1.0 --target "$GITHUB_SHA" --title "PMLCFAEFA 0.1.0 (Linux)" --notes "Experimental, Linux-only R package with bundled Julia runtime. Numerical equivalence is not yet validated."
+          gh release upload v0.1.0 PMLCFAEFA_0.1.0.tar.gz --clobber
