@@ -1,4 +1,4 @@
-name: Repair and test bundled R package (Linux)
+name: Package and verify Julia in-process R interface (Linux)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  repair:
+  release:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,46 +20,40 @@ jobs:
         with:
           r-version: 'release'
           use-public-rspm: true
-      - name: Retrieve previously compiled Julia bundle
+      - name: Download previously compiled Julia library
         run: |
           curl --fail --location --retry 3 \
-            --output /tmp/PMLCFAEFA_0.1.0.tar.gz \
-            https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.0/PMLCFAEFA_0.1.0.tar.gz
-          mkdir -p /tmp/pml-repair
-          tar -xzf /tmp/PMLCFAEFA_0.1.0.tar.gz -C /tmp/pml-repair
-          test -f /tmp/pml-repair/PMLCFAEFA/inst/julia/lib/libpmlr.so
-      - name: Replace R interface and add isolated runner
+            --output /tmp/PMLCFAEFA_0.1.1.tar.gz \
+            https://github.com/niccolocao/PMLCFAEFA/releases/download/v0.1.1/PMLCFAEFA_0.1.1.tar.gz
+          mkdir -p /tmp/pml-inprocess
+          tar -xzf /tmp/PMLCFAEFA_0.1.1.tar.gz -C /tmp/pml-inprocess
+      - name: Build R archive with in-process Julia
         run: |
           set -euo pipefail
-          pkg=/tmp/pml-repair/PMLCFAEFA
+          pkg=/tmp/pml-inprocess/PMLCFAEFA
           cp Rpkg/DESCRIPTION Rpkg/NAMESPACE "$pkg/"
-          cp Rpkg/R/* "$pkg/R/"
+          cp Rpkg/R/PMLcfaefa.R "$pkg/R/"
           cp Rpkg/src/* "$pkg/src/"
           cp Rpkg/man/* "$pkg/man/"
-          mkdir -p "$pkg/inst/julia/bin"
-          cc -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra \
-            -o "$pkg/inst/julia/bin/pmlr-runner" julia/pmlr-runner.c -ldl
-          chmod +x "$pkg/inst/julia/bin/pmlr-runner"
-          grep '^Version: 0.1.1$' "$pkg/DESCRIPTION"
-          cd /tmp/pml-repair
-          tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.1.tar.gz" PMLCFAEFA
-      - name: Install repaired R package
-        run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
-      - name: Verify preloaded Optim compatibility and model fit
-        run: |
-          test -f "$(Rscript -e 'cat(system.file("julia",package="PMLCFAEFA"))')/lib/julia/libunwind.so.8"
-          Rscript scripts/smoke.R
+          rm -f "$pkg/R/isolated.R" "$pkg/inst/julia/bin/pmlr-runner"
+          grep '^Version: 0.1.2$' "$pkg/DESCRIPTION"
+          cd /tmp/pml-inprocess
+          tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.2.tar.gz" PMLCFAEFA
+      - name: Install package
+        run: R CMD INSTALL PMLCFAEFA_0.1.2.tar.gz
+      - name: Run actual model in R process
+        run: Rscript scripts/smoke.R
       - name: Upload tested archive
         uses: actions/upload-artifact@v4
         with:
-          name: PMLCFAEFA-linux-repaired
-          path: PMLCFAEFA_0.1.1.tar.gz
-      - name: Publish verified release
+          name: PMLCFAEFA-linux-inprocess
+          path: PMLCFAEFA_0.1.2.tar.gz
+      - name: Publish GitHub Release after successful model fit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.1.1 >/dev/null 2>&1 || \
-            gh release create v0.1.1 --target "$GITHUB_SHA" \
-              --title "PMLCFAEFA 0.1.1 Linux" \
-              --notes "R interface runs the original compiled Julia model in a separate process. Experimental: numerical equivalence not yet confirmed."
-          gh release upload v0.1.1 PMLCFAEFA_0.1.1.tar.gz --clobber
+          gh release view v0.1.2 >/dev/null 2>&1 || \
+            gh release create v0.1.2 --target "$GITHUB_SHA" \
+              --title "PMLCFAEFA 0.1.2 Linux (in-process)" \
+              --notes "Julia runs directly inside the R process. WARNING: Native faults can terminate R or RStudio. Experimental: numerical equivalence is not yet validated."
+          gh release upload v0.1.2 PMLCFAEFA_0.1.2.tar.gz --clobber

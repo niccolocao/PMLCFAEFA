@@ -2,11 +2,6 @@ name: Build Julia library and R package (Linux)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
 
 jobs:
   build-linux:
@@ -25,17 +20,17 @@ jobs:
       - name: Build bundled library and R package
         run: bash ./scripts/build-linux.sh
       - name: Install package without invoking Julia
-        run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
-      - name: Run an actual model in an isolated Julia process
+        run: R CMD INSTALL PMLCFAEFA_0.1.2.tar.gz
+      - name: Run an actual model in the R process
         run: Rscript scripts/smoke.R
       - name: Upload installable archive
         uses: actions/upload-artifact@v4
         with:
           name: PMLCFAEFA-linux-r-package
-          path: PMLCFAEFA_0.1.1.tar.gz
+          path: PMLCFAEFA_0.1.2.tar.gz
       - name: Publish Linux archive on GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.1.1 >/dev/null 2>&1 || gh release create v0.1.1 --target "$GITHUB_SHA" --title "PMLCFAEFA 0.1.1 (Linux)" --notes "Experimental, Linux-only R package with bundled Julia runtime. Numerical equivalence is not yet validated."
-          gh release upload v0.1.1 PMLCFAEFA_0.1.1.tar.gz --clobber
+          gh release view v0.1.2 >/dev/null 2>&1 || gh release create v0.1.2 --target "$GITHUB_SHA" --title "PMLCFAEFA 0.1.2 (Linux)" --notes "Experimental Linux R package with in-process Julia; native faults may crash R. Numerical equivalence is not yet validated."
+          gh release upload v0.1.2 PMLCFAEFA_0.1.2.tar.gz --clobber

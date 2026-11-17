@@ -5,7 +5,7 @@ called **from R without installing Julia on the end user's machine**. The
 source code is retained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. The native build previously succeeded, but the earlier version crashed RStudio during model fitting. Version 0.1.1 runs the model in a separate process and adds a fit-level smoke test. Numerical equivalence is still unvalidated.** The original
+**Status: experimental. The native build previously succeeded, but the earlier version crashed RStudio during model fitting. Version 0.1.2 runs the model in a separate process and adds a fit-level smoke test. Numerical equivalence is still unvalidated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -27,7 +27,7 @@ first. Then execute from the repository root:
 
 ```bash
 ./scripts/build-linux.sh
-R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
+R CMD INSTALL PMLCFAEFA_0.1.2.tar.gz
 Rscript scripts/smoke.R
 ```
 
@@ -37,12 +37,12 @@ Julia runtime. It may require substantial time, disk, and memory.
 
 ## Installation for an R user without Julia
 
-Transfer `PMLCFAEFA_0.1.1.tar.gz`, generated above or downloaded from the
+Transfer `PMLCFAEFA_0.1.2.tar.gz`, generated above or downloaded from the
 GitHub Actions build artifacts, to a compatible **64-bit Linux** machine.
 Install it using:
 
 ```r
-install.packages("PMLCFAEFA_0.1.1.tar.gz", repos = NULL, type = "source")
+install.packages("PMLCFAEFA_0.1.2.tar.gz", repos = NULL, type = "source")
 library(PMLCFAEFA)
 PMLR_status()
 ```
@@ -91,8 +91,8 @@ does not require a separate Julia installation.
 - The R interface supports the main `PMLcfaefa` function, not every export from
   the three Julia modules.
 - The optional `parametr` custom initial vector is not yet exposed.
-- Model calls run in a separate Julia-backed executable distributed with the package. A native crash cannot terminate the R session.
-- The bundled Julia runtime initializes per model call, which adds startup overhead.
+- Model calls run inside the current R process. A native crash can terminate R or RStudio.
+- The bundled Julia runtime initializes once per R session.
 - The bridge returns the raw flat vector; validated statistical post-processing
   is a separate step.
 - Installation via GitHub source with `remotes::install_github()` **alone**
