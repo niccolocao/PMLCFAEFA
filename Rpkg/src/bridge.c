@@ -28,7 +28,7 @@ static void *lookup_symbol(const char *name) {
 
 typedef void (*init_julia_fn)(int, char **);
 typedef int32_t (*fit_fn)(const int64_t *, const double *,
-                         int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
+                         int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
                          double, int32_t, int32_t, int32_t, double, double,
                          const double *, int32_t);
 typedef int32_t (*length_fn)(void);
