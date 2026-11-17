@@ -90,8 +90,8 @@ int main(int argc, char **argv) {
         }
     }
     fclose(in);
-    fprintf(stderr, "[pmlr] parsed inputs n=%d p=%d q=%d K=%d\\n", n, p, q, k); fflush(stderr);
-    fprintf(stderr, "[pmlr] loading Julia libraries\\n"); fflush(stderr);
+    fprintf(stderr, "[pmlr] parsed inputs n=%d p=%d q=%d K=%d\n", n, p, q, k); fflush(stderr);
+    fprintf(stderr, "[pmlr] loading Julia libraries\n"); fflush(stderr);
     load_library(argv[1], "lib/libjulia.so");
     void *model = load_library(argv[1], "lib/libpmlr.so");
     init_julia_fn init_julia = (init_julia_fn)require_symbol(model, "init_julia");
@@ -101,10 +101,10 @@ int main(int argc, char **argv) {
     error_fn last_error = (error_fn)require_symbol(model, "pmlr_last_error");
     char julia_name[] = "pmlr-runner";
     char *julia_argv[] = {julia_name, NULL};
-    fprintf(stderr, "[pmlr] initializing Julia\\n"); fflush(stderr);
+    fprintf(stderr, "[pmlr] initializing Julia\n"); fflush(stderr);
     init_julia(1, julia_argv);
-    fprintf(stderr, "[pmlr] Julia initialization returned\\n"); fflush(stderr);
-    fprintf(stderr, "[pmlr] invoking Julia pmlr_fit\\n"); fflush(stderr);
+    fprintf(stderr, "[pmlr] Julia initialization returned\n"); fflush(stderr);
+    fprintf(stderr, "[pmlr] invoking Julia pmlr_fit\n"); fflush(stderr);
     int32_t code = fit(x, cov, n, p, q, k, c, ncov, tol, maxit, maxrest,
                        replix, fix, latent, loading, has_l);
     if (code != 0) {

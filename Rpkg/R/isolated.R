@@ -45,9 +45,15 @@
     executable <- runner
     arguments <- shQuote(c(root, input, output))
   }
+  library_paths <- c(file.path(root, "lib", "julia"), file.path(root, "lib"))
+  inherited <- Sys.getenv("LD_LIBRARY_PATH", unset = "")
+  if (nzchar(inherited)) library_paths <- c(library_paths, inherited)
+  environment <- paste0("LD_LIBRARY_PATH=", shQuote(paste(library_paths, collapse = ":")))
   log <- suppressWarnings(
-    system2(executable, args = arguments, stdout = TRUE, stderr = TRUE)
+    system2(executable, args = arguments, env = environment,
+            stdout = TRUE, stderr = TRUE)
   )
+  if (debug) cat(paste(log, collapse = "\n"), "\n")
   status <- attr(log, "status")
   if (is.null(status)) status <- 0L
   if (status != 0L || !file.exists(output)) {

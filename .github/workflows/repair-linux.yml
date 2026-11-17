@@ -45,12 +45,10 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/PMLCFAEFA_0.1.1.tar.gz" PMLCFAEFA
       - name: Install repaired R package
         run: R CMD INSTALL PMLCFAEFA_0.1.1.tar.gz
-      - name: Install debugger for native crash diagnosis
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq gdb
-      - name: Capture full gdb crash details during actual Julia model fit
-        env:
-          PMLR_DEBUG_GDB: '1'
-        run: Rscript scripts/smoke.R
+      - name: Verify model with bundled Julia runtime libraries
+        run: |
+          test -f "$(Rscript -e 'cat(system.file("julia",package="PMLCFAEFA"))')/lib/julia/libunwind.so.8"
+          Rscript scripts/smoke.R
       - name: Upload tested archive
         uses: actions/upload-artifact@v4
         with:
