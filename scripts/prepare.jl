@@ -15,8 +15,12 @@ for name in ("MixCFAEFA.jl", "Sgr.jl", "PMLCFAEFA.jl")
         source = replace(source, "Optim.only_fg!" => "Optim.NLSolversBase.only_fg!")
 
         restart_loop = "while code_error == 0.0\n"
-        occursin(restart_loop, source) || error("Cannot find restart loop")
-        source = replace(source, restart_loop => "while code_error == 0.0 && iter_err <= maxNumRestart\n"; count=1)
+        bounded_restart_loop = "while code_error == 0.0 && iter_err <= maxNumRestart\n"
+        if occursin(restart_loop, source)
+            source = replace(source, restart_loop => bounded_restart_loop; count=1)
+        elseif !occursin(bounded_restart_loop, source)
+            error("Cannot find bounded restart loop")
+        end
         ending = "    return vcat(res,err_0_count)"
         occursin(ending, source) || error("Cannot find return statement")
         source = replace(source, ending => "    code_error == 0.0 && error(\"Maximum number of restarts reached\")\n" * ending; count=1)
