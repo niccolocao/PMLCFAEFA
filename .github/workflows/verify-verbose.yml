@@ -1,0 +1,52 @@
+name: Verify verbose initialization and EM progress
+
+on:
+  push:
+    branches: [feature/verbose-initialization]
+  workflow_dispatch:
+
+jobs:
+  verify-progress:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Prepare Julia
+        run: julia --startup-file=no scripts/prepare.jl
+      - name: Verify initialization and optimizer progress logs
+        shell: bash
+        run: |
+          set -o pipefail
+          julia --startup-file=no --project=julia/PMLRBridge - <<'JULIA' | tee /tmp/progress.log
+          using Random
+          include("julia/PMLRBridge/src/PMLRBridge.jl")
+          const M = PMLRBridge.PMLCFAEFA
+          Random.seed!(901)
+          n = 55; p = 5; q = 1; K = 1; c = 4
+          z = randn(n)
+          X = Matrix{Int}(undef,n,p)
+          for j in 1:p, i in 1:n
+              X[i,j] = searchsortedfirst([-0.8,0.0,0.8],z[i]+0.75*randn())
+          end
+          ics = ones(n,1)
+          L = ones(p,q)
+          pairs = hcat([Int[i,j] for i in 1:p-1 for j in i+1:p]...)
+          indices = [i+(j-1)*p for j in 1:K for i in j:p]
+          M.PML_VERBOSE[] = true
+          M.PML_FAST[] = true
+          M.PML_RESTART[] = 1
+          theta = M.startvalslm(2,X,n,p,c,q,K,1,ics,pairs,L,indices)
+          @assert length(theta) > 0
+          result = M.EMparsMixlm(theta,1.0e10,X,p,q,K,c,ics,1,2,L,indices,pairs)
+          println("Progress check EM status=",result[end])
+          JULIA
+          grep -q 'initialization=1/2 stage=draw_parameters' /tmp/progress.log
+          grep -q 'initialization=1/2 stage=E_step_start' /tmp/progress.log
+          grep -q 'initialization=1/2 stage=M_step_start' /tmp/progress.log
+          grep -q 'stage=initialization initialization=1 em_iter=1 evaluation=1' /tmp/progress.log
+          grep -q 'initialization=2/2 stage=complete logCL=' /tmp/progress.log
+          grep -q 'EM branch=EMparsMixlm restart=1 iter=0' /tmp/progress.log
+          echo 'VERBOSE INITIALIZATION AND EM LOGGING CHECK PASSED'
