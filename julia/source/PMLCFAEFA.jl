@@ -3031,7 +3031,7 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
     if F !== nothing 
   
         if W !== nothing
-            fast_value = 0.0
+            plimix_fast = zeros(Float64,n)
             @inbounds for idx in 1:size(pairsindex,2)
                 i = pairsindex[1,idx]
                 j = pairsindex[2,idx]
@@ -3043,29 +3043,29 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                 sd12 = sqrt(Scfa[2,2])
                 sd21 = sqrt(Sefa[1,1])
                 sd22 = sqrt(Sefa[2,2])
+                lc = zeros(Float64,c,c)
+                le = zeros(Float64,c,c)
                 for category in 1:(c*c)
-                    weight1 = W[category,1,idx]
-                    weight2 = W[category,2,idx]
-                    if weight1 == 0.0 && weight2 == 0.0
-                        continue
-                    end
                     a = (category-1) % c + 1
                     b = div(category-1,c) + 1
-                    if weight1 != 0.0
-                        prob1 = bvnP(t1[i,a]/sd11,t1[i,a+1]/sd11,
-                                     t1[j,b]/sd12,t1[j,b+1]/sd12,rho1,false)
-                        fast_value -= weight1*log(prob1)
+                    if W[category,1,idx] != 0.0
+                        lc[a,b] = log(bvnP(t1[i,a]/sd11,t1[i,a+1]/sd11,
+                                            t1[j,b]/sd12,t1[j,b+1]/sd12,rho1,false))
                     end
-                    if weight2 != 0.0
-                        prob2 = bvnP((t2[i,a]-mu[i])/sd21,(t2[i,a+1]-mu[i])/sd21,
-                                     (t2[j,b]-mu[j])/sd22,(t2[j,b+1]-mu[j])/sd22,rho2,false)
-                        fast_value -= weight2*log(prob2)
+                    if W[category,2,idx] != 0.0
+                        le[a,b] = log(bvnP((t2[i,a]-mu[i])/sd21,(t2[i,a+1]-mu[i])/sd21,
+                                            (t2[j,b]-mu[j])/sd22,(t2[j,b+1]-mu[j])/sd22,rho2,false))
                     end
                 end
+                for N in 1:n
+                    a = X[N,i]
+                    b = X[N,j]
+                    plimix_fast[N] += lc[a,b]*T[N,1,idx] + le[a,b]*T[N,2,idx]
+                end
             end
-            return fast_value
+            return -sum(plimix_fast)
         end
-    
+
         plimix=zeros(Float64,n);
         tcfa1=[t1[j,X[i,j]+1] for i in 1:n, j in 1:p]
         tcfa=[t1[j,X[i,j]] for i in 1:n, j in 1:p]
