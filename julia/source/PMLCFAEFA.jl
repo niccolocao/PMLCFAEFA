@@ -2018,7 +2018,12 @@ end
 function startvalslm(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
     liksmix = Vector{Float64}(undef,replix); params = Matrix{Float64}(undef,Int((c-1)*p+p+(q*(q-1))/2+(c-1-2)*p+(p*K-(K*(K-1)/2))+(p)+K)+ncov,replix);#p-1
     for i in 1:replix
-        # println(i)
+        attempt_start = Base.time()
+        if PML_VERBOSE[]
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=draw_parameters")
+            flush(stdout)
+        end
 
         tau1 = vec(hcat(rand(Uniform(-1.9,-1.),p).+reshape(repeat(collect(range(0,3.1,c-1)),inner=p),p,(c-1))))
         lambda1 = rand(Uniform(0.5,1.3),p);
@@ -2039,14 +2044,43 @@ function startvalslm(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
 
         param_initials = vcat(tau1,lambda1,phi,tau2,lambda2,psi,kappa,bets)
 
-        # first iteration
-        plimix = E_stepMixlm(param_initials,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true);
-        T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix;
-        t = time()
-        params[:,i] = M_parsMixlm(T,param_initials,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,1,t,plimix,false); #solo primo argomento di output
-        dt = time() - t
-        prrot=params[:,i]
-        liksmix[i] = E_stepMixlm(prrot,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false);
+        if PML_VERBOSE[]
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix, " stage=E_step_start")
+            flush(stdout)
+        end
+        e_start = Base.time()
+        plimix = E_stepMixlm(param_initials,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true)
+        T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix
+        if PML_VERBOSE[]
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=E_step_done seconds=", Base.time()-e_start)
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=M_step_start")
+            flush(stdout)
+        end
+        t = Base.time()
+        params[:,i] = M_parsMixlm(T,param_initials,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,1,t,plimix,false,:initialization,i)
+        if PML_VERBOSE[]
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=M_step_done seconds=", Base.time()-t)
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=logCL_start")
+            flush(stdout)
+        end
+        prrot = params[:,i]
+        liksmix[i] = E_stepMixlm(prrot,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false)
+        if PML_VERBOSE[]
+            println("PML restart=", PML_RESTART[], " initialization=", i, "/", replix,
+                    " stage=complete logCL=", liksmix[i],
+                    " negLogCL=", -liksmix[i], " elapsed_seconds=", Base.time()-attempt_start)
+            flush(stdout)
+        end
+    end
+    if PML_VERBOSE[]
+        best = argmax(liksmix)
+        println("PML restart=", PML_RESTART[], " initialization=selected attempt=", best,
+                " logCL=", liksmix[best])
+        flush(stdout)
     end
     param_initials0 = params[:,findall(liksmix.==maximum(liksmix))]
     lik=liksmix[findall(liksmix.==maximum(liksmix))]
@@ -2612,7 +2646,7 @@ end
     
 
 
-function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,time,plimix,start)
+function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,time,plimix,start,stage::Symbol=:em,initialization::Int=0)
 
     trsi = (c-1)*p #attenzione p è già qui
     trs = (c-1-2)*p
@@ -2627,11 +2661,25 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
 
     par = zeros(Float64,size(lb))
     pair_weights = PML_FAST[] ? pml_pair_category_weights(X,T,pairsindex,c) : nothing
+    evaluations = Ref(0)
+    fg! = (F,G,x) -> begin
+        if PML_VERBOSE[]
+            evaluations[] += 1
+            if evaluations[] == 1 || evaluations[] % 5 == 0
+                println("M restart=", PML_RESTART[], " stage=", stage,
+                        " initialization=", initialization, " em_iter=", it,
+                        " evaluation=", evaluations[], " objective=", F !== nothing,
+                        " gradient=", G !== nothing, " elapsed_seconds=", Base.time()-time)
+                flush(stdout)
+            end
+        end
+        return fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)
+    end
 
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!(fg!),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(show_trace=PML_VERBOSE[], show_every=1, f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!(fg!),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(show_trace=PML_VERBOSE[], show_every=1, f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
@@ -2649,7 +2697,8 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
     # end 
     
     if PML_VERBOSE[]
-        println("M branch=M_parsMixlm restart=", PML_RESTART[], " iter=", it,
+        println("M branch=M_parsMixlm restart=", PML_RESTART[], " stage=", stage,
+                " initialization=", initialization, " iter=", it,
                 " fast=", PML_FAST[], " optimizer_converged=", Optim.converged(par),
                 " optimizer_iterations=", hasproperty(par,:iterations) ? getproperty(par,:iterations) : "unknown",
                 " minimum_negQ=", Optim.minimum(par))

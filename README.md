@@ -5,7 +5,7 @@ called **from R without installing Julia on the end user's machine**. The
 Julia source code is maintained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. Version 0.1.5 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
+**Status: experimental. Version 0.1.6 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -27,7 +27,7 @@ first. Then execute from the repository root:
 
 ```bash
 ./scripts/build-linux.sh
-R CMD INSTALL PMLCFAEFA_0.1.5.tar.gz
+R CMD INSTALL PMLCFAEFA_0.1.6.tar.gz
 Rscript scripts/smoke.R
 ```
 
@@ -37,12 +37,12 @@ Julia runtime. It may require substantial time, disk, and memory.
 
 ## Installation for an R user without Julia
 
-Transfer `PMLCFAEFA_0.1.5.tar.gz`, generated above or downloaded from the
+Transfer `PMLCFAEFA_0.1.6.tar.gz`, generated above or downloaded from the
 GitHub Actions build artifacts, to a compatible **64-bit Linux** machine.
 Install it using:
 
 ```r
-install.packages("PMLCFAEFA_0.1.5.tar.gz", repos = NULL, type = "source")
+install.packages("PMLCFAEFA_0.1.6.tar.gz", repos = NULL, type = "source")
 library(PMLCFAEFA)
 PMLR_status()
 ```
@@ -131,10 +131,10 @@ also consider relative and Aitken differences. The source replaces
 obsolete Optim `f_tol` and `outer_f_tol` settings with supported
 `f_reltol` and `outer_f_reltol` options to suppress repeated warnings.
 
-The native interface has changed. Rebuild and reinstall version 0.1.5;
+The native interface has changed. Rebuild and reinstall version 0.1.6;
 the existing v0.1.2 library cannot be used with this interface.
 
-## Optional ordinal pair probability caching (version 0.1.5)
+## Optional ordinal pair probability caching (version 0.1.6)
 
 With `latentmeans = 1` and `fixthrehsolds = 0`, use `fast = TRUE` to
 calculate the bivariate probabilities once for each observed category
@@ -167,3 +167,18 @@ fit <- PMLCFAEFA::PMLcfaefa(
   fast = TRUE, verbose = TRUE
 )
 ```
+
+## Verbose initializations (version 0.1.6)
+
+When `verbose = TRUE`, the Julia implementation reports each of the
+`replix` random initializations inside every restart. The console shows
+`initialization=i/replix`, the start and end of the preliminary E-step
+and M-step, optimizer evaluations, elapsed times, and the composite
+log-likelihood used to select the starting point. The optimizer's own
+iteration trace is enabled, without changing its objective or gradient.
+Only after these preliminary steps does `EM iter=0` appear.
+
+With 42 items, the first initialization can be slow. When the initial E-step
+is in progress, no EM iteration has completed yet. `fast = TRUE` does not
+skip these initializations. The output can be long with
+`verbose = TRUE`.

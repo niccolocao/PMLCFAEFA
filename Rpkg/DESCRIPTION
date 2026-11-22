@@ -1,7 +1,7 @@
 Package: PMLCFAEFA
 Type: Package
 Title: R Interface to Compiled Julia PML CFA-EFA Models
-Version: 0.1.5
+Version: 0.1.6
 Authors@R: person("PMLCFAEFA", "Authors", role = c("aut", "cre"), email = "maintainer@example.org")
 Description: Runs ordinal PML CFA-EFA models using a compiled Julia library
     bundled with this R package. A separate Julia installation is not required

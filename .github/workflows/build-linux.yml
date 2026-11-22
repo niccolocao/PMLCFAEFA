@@ -24,17 +24,23 @@ jobs:
       - name: Build bundled library and R package
         run: bash ./scripts/build-linux.sh
       - name: Install package without invoking Julia
-        run: R CMD INSTALL PMLCFAEFA_0.1.5.tar.gz
-      - name: Run an actual model in the R process
-        run: Rscript scripts/smoke.R
+        run: R CMD INSTALL PMLCFAEFA_0.1.6.tar.gz
+      - name: Run an actual model in the R process and verify init logging
+        shell: bash
+        run: |
+          set -o pipefail
+          Rscript scripts/smoke.R | tee /tmp/pmlcfaefa-smoke.log
+          grep -q 'initialization=1/2 stage=draw_parameters' /tmp/pmlcfaefa-smoke.log
+          grep -q 'stage=M_step_start' /tmp/pmlcfaefa-smoke.log
+          grep -q 'EM branch=EMparsMixlm restart=' /tmp/pmlcfaefa-smoke.log
       - name: Upload installable archive
         uses: actions/upload-artifact@v4
         with:
           name: PMLCFAEFA-linux-r-package
-          path: PMLCFAEFA_0.1.5.tar.gz
+          path: PMLCFAEFA_0.1.6.tar.gz
       - name: Publish Linux archive on GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.1.5 >/dev/null 2>&1 || gh release create v0.1.5 --target "$GITHUB_SHA" --title "PMLCFAEFA 0.1.5 (Linux)" --notes "Experimental Linux R package with in-process Julia; native faults may crash R. Numerical equivalence is not yet validated."
-          gh release upload v0.1.5 PMLCFAEFA_0.1.5.tar.gz --clobber
+          gh release view v0.1.6 >/dev/null 2>&1 || gh release create v0.1.6 --target "$GITHUB_SHA" --title "PMLCFAEFA 0.1.6 (Linux)" --notes "Experimental Linux R package with in-process Julia; native faults may crash R. Numerical equivalence is not yet validated."
+          gh release upload v0.1.6 PMLCFAEFA_0.1.6.tar.gz --clobber

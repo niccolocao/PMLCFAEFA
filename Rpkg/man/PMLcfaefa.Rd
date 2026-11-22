@@ -23,7 +23,7 @@ PMLcfaefa(X, p = ncol(X), q, K, c = max(X),
 \item{L_str}{FALSE for the default CFA loading structure, or a numeric \code{p x q} matrix.}
 \item{latentmeans}{Original Julia latent mean mode (0, 1, or 2).}
 \item{parametr}{Not supported in the initial native bridge; keep FALSE.}
-\item{verbose}{Logical. If TRUE, print the composite log-likelihood and the actual stopping differences at every EM iteration. FALSE by default. The primary stopping difference is absolute for latentmeans = 1 and fixthrehsolds = 0, and relative in the other supported branches.}
+\item{verbose}{Logical. If TRUE, print the initialization attempt, start and end of preliminary E-steps and M-steps, optimizer evaluations and traces, elapsed times, and EM log-likelihood changes for each restart. For latentmeans=1 and fixthrehsolds=0, the initial observed composite log-likelihood is evaluated at EM iteration zero. FALSE by default.}
 \item{fast}{Logical. If TRUE, cache the bivariate probabilities for each ordinal response pair in the M-step objective, preserving the original observation order and analytic gradient. Supported only when latentmeans=1 and fixthrehsolds=0. FALSE uses the original algorithm. The cached and original methods were compared from identical Julia starting parameters in an EM regression test.}
 }
 \value{An object of class \code{pmlcfaefa_fit} with elements \code{raw},
