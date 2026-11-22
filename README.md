@@ -2,10 +2,10 @@
 
 This draft converts the three provided Julia modules into a package that can be
 called **from R without installing Julia on the end user's machine**. The
-source code is retained in `julia/source/`; the preparation script adapts the
+Julia source code is maintained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. The native build previously succeeded, but the earlier version crashed RStudio during model fitting. Version 0.1.3 runs the model in a separate process and adds a fit-level smoke test. Numerical equivalence is still unvalidated.** The original
+**Status: experimental. Version 0.1.3 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -13,7 +13,7 @@ until numerical equivalence has been checked against the Julia originals.
 
 ## Repository structure
 
-- `julia/source/*.jl`: original files, kept unchanged
+- `julia/source/*.jl`: Julia model sources, including the EM diagnostics changes
 - `julia/PMLRBridge/src/PMLRBridge.jl`: C-callable Julia wrapper
 - `scripts/prepare.jl`: copies the source into the Julia package, adapts module imports, and installs dependencies
 - `scripts/build.jl`: compiles the Julia project to a relocatable library bundle
