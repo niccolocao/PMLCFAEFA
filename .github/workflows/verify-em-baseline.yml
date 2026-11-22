@@ -32,11 +32,7 @@ jobs:
           ics = ones(n,1)
           L = ones(p,q)
           pairs = Matrix{Int}(undef,2,binomial(p,2))
-          k = 0
-          for i in 1:p-1, j in i+1:p
-              k += 1
-              pairs[:,k] = [i,j]
-          end
+          pairs .= hcat([Int[i,j] for i in 1:p-1 for j in i+1:p]...)
           indices = [i+(j-1)*p for j in 1:K for i in j:p]
           M.PML_VERBOSE[] = true
           M.PML_FAST[] = false
