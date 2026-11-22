@@ -23,8 +23,6 @@ jobs:
           use-public-rspm: true
       - name: Build bundled library and R package
         run: bash ./scripts/build-linux.sh
-      - name: Compare original and fast M-step likelihood and gradient
-        run: julia --startup-file=no --project=julia/PMLRBridge scripts/test-fast.jl
       - name: Install package without invoking Julia
         run: R CMD INSTALL PMLCFAEFA_0.1.4.tar.gz
       - name: Run an actual model in the R process

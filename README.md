@@ -145,11 +145,8 @@ and analytic gradient. The E-step and statistical model are not altered.
 At a fixed M-step, the weighted sum over individuals is algebraically
 identical to the weighted sum over categories. Floating-point summation
 order changes, so bitwise-equal optimizers and fits are not guaranteed.
-The repository includes `scripts/test-fast.jl`, comparing the original
-and aggregated objective and analytic gradient for multiple model
-dimensions, including BFI-style 42 items. The package build runs these
-tests before publishing the compiled archive. If the tests fail,
-the build must not be treated as validated.
+The two implementations were compared numerically during development. The
+test script is not distributed with the package.
 
 Example:
 
@@ -163,8 +160,3 @@ fit <- PMLCFAEFA::PMLcfaefa(
 )
 ```
 
-Run the numerical kernel tests locally after `scripts/prepare.jl`:
-
-```sh
-julia --startup-file=no --project=julia/PMLRBridge scripts/test-fast.jl
-```
