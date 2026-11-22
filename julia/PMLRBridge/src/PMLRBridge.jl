@@ -12,7 +12,7 @@ Base.@ccallable function pmlr_fit(
     n::Cint, p::Cint, q::Cint, K::Cint, c::Cint, ncov::Cint,
     tol::Cdouble, maxit::Cint, maxrest::Cint, replix::Cint,
     fixthresholds::Cdouble, latentmeans::Cdouble,
-    lp::Ptr{Cdouble}, has_l::Cint, verbose::Cint,
+    lp::Ptr{Cdouble}, has_l::Cint, verbose::Cint, fast::Cint,
 )::Cint
     try
         LAST_RESULT[] = Float64[]
@@ -23,7 +23,7 @@ Base.@ccallable function pmlr_fit(
         result = PMLCFAEFA.PMLcfaefa(
             X, Int(p), Int(q), Int(K), Int(c), covariates,
             Float64(tol), Int(maxit), Int(maxrest), Int(replix),
-            Float64(fixthresholds), loading_structure, Float64(latentmeans), false, verbose != 0,
+            Float64(fixthresholds), loading_structure, Float64(latentmeans), false, verbose != 0, fast != 0,
         )
         LAST_RESULT[] = Float64.(result)
         return Cint(0)

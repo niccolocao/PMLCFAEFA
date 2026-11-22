@@ -24,7 +24,7 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
                       ics = matrix(1, nrow(X), 1), tol = 1e-6,
                       maxit = 1000L, maxNumRestart = 20L, replix = 10L,
                       fixthrehsolds = 0, L_str = FALSE,
-                      latentmeans = 1, parametr = FALSE, verbose = FALSE) {
+                      latentmeans = 1, parametr = FALSE, verbose = FALSE, fast = FALSE) {
   X <- as.matrix(X)
   if (!is.numeric(X) || anyNA(X) || any(!is.finite(X)) ||
       any(X != round(X))) stop("X must contain finite integer-valued categories.", call. = FALSE)
@@ -34,6 +34,10 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
     stop("p must equal ncol(X).", call. = FALSE)
   if (any(X < 1) || any(X > c))
     stop("X must contain categories between 1 and c.", call. = FALSE)
+  if (!is.logical(fast) || length(fast) != 1L || is.na(fast))
+    stop("fast must be TRUE or FALSE.", call. = FALSE)
+  if (fast && !(latentmeans == 1 && fixthrehsolds == 0))
+    stop("fast supports latentmeans=1 and fixthrehsolds=0 only.", call. = FALSE)
   if (!is.logical(verbose) || length(verbose) != 1L || is.na(verbose))
     stop("verbose must be TRUE or FALSE.", call. = FALSE)
   if (!identical(parametr, FALSE))
@@ -71,7 +75,7 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
   raw <- .Call(C_pmlr_fit, X, ics, as.integer(q), as.integer(K),
                as.integer(c), as.double(tol), as.integer(maxit),
                as.integer(maxNumRestart), as.integer(replix),
-               as.double(fixthrehsolds), loading, as.double(latentmeans), as.integer(verbose))
+               as.double(fixthrehsolds), loading, as.double(latentmeans), as.integer(verbose), as.integer(fast))
   structure(list(raw = raw, status_code = raw[length(raw) - 1L],
                  restart_count = raw[length(raw)],
                  n = nrow(X), p = ncol(X), q = q, K = K, c = c),

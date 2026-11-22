@@ -1,0 +1,21 @@
+name: Verify optional ordinal pair aggregation
+
+on:
+  push:
+    branches:
+      - feature/ordinal-pair-cache
+  workflow_dispatch:
+
+jobs:
+  numerical-equivalence:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Prepare Julia modules
+        run: julia --startup-file=no scripts/prepare.jl
+      - name: Compare original and cached M-step objective and gradient
+        run: julia --startup-file=no --project=julia/PMLRBridge scripts/test-fast.jl
