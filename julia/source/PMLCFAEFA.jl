@@ -2,6 +2,7 @@ module PMLCFAEFA
 
 const PML_VERBOSE = Ref(false)
 const PML_FAST = Ref(false)
+const PML_RESTART = Ref(0)
 
 function pml_em_log(branch, iteration, logcl, delta_stop, delta_aitken, delta_abs, tol, increasing)
     if PML_VERBOSE[]
@@ -820,9 +821,10 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
     if L_str == false A = reshape(Diagonal(ones(q)),q,q);L_str = kron(A,ones(Int64(p/q))) end
     pairsindex=mapreduce(permutedims,hcat,collect(combinations(1:p,2))');
     iter_err = 1; code_error = 0.0;  err_0_count = 0; A2 = diagm(ones(K));  indices = [i + (j - 1) * p for j in 1:K for i in j:p]   
-    while code_error == 0.0
+    while code_error == 0.0 && iter_err <= maxNumRestart
+        PML_RESTART[] = iter_err
         if PML_VERBOSE[]
-            println("PML restart=", iter_err)
+            println("PML restart=", iter_err, "/", maxNumRestart, " fast=", PML_FAST[], " replix=", replix)
             flush(stdout)
         end
         # println("Restart: n. ", iter_err)
@@ -2131,171 +2133,82 @@ end
 
 
 function EMparsMixlm(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
-    local plimix::Array, T,oldlik
     n = size(X,1)
-    er=0;
-    # if P>3 pairsindex=pairsindex[end:-1:1,:]; end 
-    it=0;
-    dev=Inf; dev1=Inf; dev2=Inf;
+    oldlik = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false)
+    isfinite(oldlik) || throw(DomainError(oldlik, "Non-finite initial composite log-likelihood"))
+    it = 0
+    dev = Inf
+    noerror = true
+    previous_delta = NaN
+    previous_aitken = NaN
+    if PML_VERBOSE[]
+        println("EM branch=EMparsMixlm restart=", PML_RESTART[], " iter=0",
+                " logCL=", oldlik, " negLogCL=", -oldlik,
+                " initial=true fast=", PML_FAST[])
+        flush(stdout)
+    end
 
-    
-    oldlik=-1000000.;
-    oldlik2=1000000.;
-    oldlikA=-1000000.;
-    lik=0.
-    
-
-    noerror = true; devnostop = true;  sum_devs = 0;
-    while (dev>tol) && it <= maxit && noerror #&& devnostop
-        
-        it = it+1;
-        param=param01;
-
-        T00 = 1
-        plimix = E_stepMixlm(param,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true);
-        T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix;
+    while it < maxit && dev > tol && noerror
+        it += 1
+        param = param01
+        plimix = E_stepMixlm(param,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true)
+        T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix
         t = time()
-        param01 = M_parsMixlm(T,param,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,t,plimix,false); 
-        dt = time() - t
-        if param01 == false
-            return return(vcat(param01,vec(plimix),vec(T),0.,0.))
+        candidate = M_parsMixlm(T,param,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,t,plimix,false)
+        m_seconds = time() - t
+        if candidate === false || !all(isfinite,candidate)
+            noerror = false
+            PML_VERBOSE[] && println("EM branch=EMparsMixlm restart=", PML_RESTART[],
+                                     " iter=", it, " failed=true reason=invalid_M_step")
+            break
         end
-        lik = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false);
 
-        #Aitken acceleration based stopping criterion p.142 EM algorithm and extensions
-        con = (lik-oldlik)/(oldlik-oldlik2);
-        likA = oldlik + (lik-oldlik)/(1-con)
-        old_dev = dev1
-        dev1 = abs(likA-oldlikA)
-        # dev2 = abs(lik-oldlik)
-        
-        # println(param01)
-        dev = abs(lik-oldlik)#abs(lik-oldlik)/abs(oldlik)
-        # println(lik," ",dev," ",dev2," ",dev1," ",oldlik<lik," ",dt)
-
-        noerror = oldlik<lik
-
-        oldlikA=likA
-        oldlik2=oldlik
-        oldlik=lik;
-        pml_em_log("EMparsMixlm", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
-
-        # sum_devs += dev > old_dev
-        # devstop = sum_devs <= 3
+        lik = E_stepMixlm(candidate,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false)
+        delta = lik-oldlik
+        dev = abs(delta)
+        improvement = isfinite(lik) && delta >= 0.0
+        aitken = NaN
+        aitken_delta = NaN
+        if it >= 2 && isfinite(previous_delta) && previous_delta != 0.0
+            ratio = delta/previous_delta
+            if isfinite(ratio) && ratio != 1.0
+                aitken = oldlik + delta/(1.0-ratio)
+                if isfinite(aitken) && isfinite(previous_aitken)
+                    aitken_delta = abs(aitken-previous_aitken)
+                end
+            end
+        end
+        if PML_VERBOSE[]
+            println("EM branch=EMparsMixlm restart=", PML_RESTART[], " iter=", it,
+                    " logCL=", lik, " negLogCL=", -lik,
+                    " delta_logCL=", delta, " delta_negLogCL=", -delta,
+                    " delta_stop=", dev, " delta_aitken=", aitken_delta,
+                    " m_seconds=", m_seconds, " tol=", tol,
+                    " increasing=", improvement)
+            flush(stdout)
+        end
+        if !improvement
+            noerror = false
+            break
+        end
+        param01 = candidate
+        oldlik = lik
+        previous_delta = delta
+        previous_aitken = aitken
     end
-    
-    # classificazioni dopo ultima massimizzazione
-    plimix = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true);
-    T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix;
 
-    if noerror == true && it<=maxit 
-        return vcat(param01,vec(plimix),vec(T),lik,1.)
-    else
-        return vcat(param01,vec(plimix),vec(T),0.,0.)
+    converged = noerror && dev <= tol
+    if PML_VERBOSE[]
+        reason = converged ? "converged" : (noerror ? "maxit" : "M_step_or_monotonicity_failure")
+        println("EM branch=EMparsMixlm restart=", PML_RESTART[],
+                " end=true iterations=", it, " status=", reason,
+                " last_logCL=", oldlik, " last_negLogCL=", -oldlik)
+        flush(stdout)
     end
+    plimix = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true)
+    T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix
+    return vcat(param01,vec(plimix),vec(T),converged ? oldlik : 0.0, converged ? 1.0 : 0.0)
 end
-
-
-
-
-
-# function E_stepMixlm(param,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,estep,T=false)
-#     if sum(param .== 0.) == size(param,1)
-#         return -Inf
-#     end
-#     trs = (c-1-2)
-#     trsi = (c-1)
-#     t1s = param[1:trsi*p]
-#     L1 = param[(trsi*p+1):(trsi*p+p)].*L_str 
-#     Phi = reconstruct_correlation_matrix(param[Int(trsi*p+p+1):Int(trsi*p+p+(q*(q-1))/2)])
-    
-#     t2s = param[Int(trsi*p+p+(q*(q-1))/2+1):Int(trsi*p+p+(q*(q-1))/2+trs*p)]
-#     L2 = reconstruct_L2_matrix(p, K, indices, param[Int(trsi*p+p+(q*(q-1))/2+trs*p+1):Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2)))] )
-
-    
-#     Psi = diagm(param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+1):Int((trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2)))+(p))])#Psi = diagm(vcat(1.,param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+1):Int((trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2)))+(p-1))]))#K
-#     kappa = param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p)+1):Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p)+K)]   # interc2 = param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p-1)+1):Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p-1)+p)]
-#     betas = param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p)+K+1):Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p)+K+ncov)]  #  betas = param[Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p-1)+p+1):Int(trsi*p+p+(q*(q-1))/2+trs*p+(p*K-(K*(K-1)/2))+(p-1)+p+ncov)]
-
-#     propo = exp.(ics*betas)./(exp.(ics*betas).+1)
-    
-#     pg = hcat(propo,1. .-propo)
-
-#     mu = L2*kappa
-    
-#     Sigms=ones(p,p,2);
-#     Sigms[:,:,1]=L1*Phi*L1'+ Diagonal(1 .-Diagonal((L1*Phi*L1')))
-#     Sigms[:,:,2]=L2*L2'+Psi 
-    
-#     br1 = reshape(t1s,p,trsi)
-#     t1=hcat(fill(-Inf,p),br1,fill(Inf,p))
-#     br2 = hcat(br1[:,1:2],reshape(t2s,p,trs))
-#     t2=hcat(fill(-Inf,p),br2,fill(Inf,p))
-
-
-#     tcfa1=[t1[j,X[i,j]+1] for i in 1:n, j in 1:p]
-#     tcfa=[t1[j,X[i,j]] for i in 1:n, j in 1:p]
-#     tefa1=[t2[j,X[i,j]+1] for i in 1:n, j in 1:p]
-#     tefa=[t2[j,X[i,j]] for i in 1:n, j in 1:p]
-
-#     tlow = cat(tcfa,tefa,dims=3)
-#     tup = cat(tcfa1,tefa1,dims=3)
-    
-#     if estep == true
-#         low = Matrix{Float64}(undef,n,2); up = Matrix{Float64}(undef,n,2)
-#         plimix=ones(n,2,size(pairsindex,2));
-    
-#         for idx=1:size(pairsindex,2) #parallelizzabile
-#             for g=1:2
-#                 if g==1
-#                     s2c=Sigms[pairsindex[:,idx],pairsindex[:,idx],g]
-#                     r2c=cov2cor(s2c);
-#                     up=(tup[:,pairsindex[:,idx],g])
-#                     low=(tlow[:,pairsindex[:,idx],g])
-#                 elseif g==2
-#                     s2c=Sigms[pairsindex[:,idx],pairsindex[:,idx],g]
-#                     r2c=cov2cor(s2c);
-#                     up=(tup[:,pairsindex[:,idx],g].-(mu)[pairsindex[:,idx]]')./sqrt.(diag(s2c)');#./sqrt.(diag(s2c)');
-#                     low=(tlow[:,pairsindex[:,idx],g].-(mu)[pairsindex[:,idx]]')./sqrt.(diag(s2c)');#./sqrt.(diag(s2c)');
-#                 end
-#                 B=hcat(low,up);
-#                 t3=bvnP.(B[:,1],B[:,3],B[:,2],B[:,4],r2c[1,2],false);
-#                 plimix[:,g,idx]= t3.*pg[:,g];
-#             end
-#         end
-#     # % probabilities in each row must sum to 1 (application of Bayes law)
-#         return plimix
-#     elseif estep == false
-#         low = Matrix{Float64}(undef,n,2); up = Matrix{Float64}(undef,n,2)
-#         plimix=ones(n,2,size(pairsindex,2));
-
-#         for idx=1:size(pairsindex,2) #parallelizzabile
-#             for g=1:2
-#                 if g==1
-#                     s2c=Sigms[pairsindex[:,idx],pairsindex[:,idx],g]
-#                     r2c=cov2cor(s2c);
-#                     up=(tup[:,pairsindex[:,idx],g])
-#                     low=(tlow[:,pairsindex[:,idx],g])
-#                 elseif g==2
-#                     s2c=Sigms[pairsindex[:,idx],pairsindex[:,idx],g]
-#                     r2c=cov2cor(s2c);
-#                     up=(tup[:,pairsindex[:,idx],g].-(mu)[pairsindex[:,idx]]')./sqrt.(diag(s2c)');#./sqrt.(diag(s2c)');
-#                     low=(tlow[:,pairsindex[:,idx],g].-(mu)[pairsindex[:,idx]]')./sqrt.(diag(s2c)');#./sqrt.(diag(s2c)');
-#                 end
-#                 B=hcat(low,up);
-#                 t3=bvnP.(B[:,1],B[:,3],B[:,2],B[:,4],r2c[1,2],false);
-#                 plimix[:,g,idx]= t3
-#             end
-#         end
-#         lik1=(log.(plimix));
-#         lik1=sum(lik1,dims=3);
-#         U=exp.(lik1)[:,:,1].*pg; 
-#         cllik=sum(log.(sum(U,dims=2)))
-#         return cllik
-#     end
-# end
-    
-
 
 function E_stepMixlm(param,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,estep)#::AbstractVector{T},q::Int64,K::Int64,p::Int64,n::Int64,c::Int64,X::Matrix{Int64},ics::Matrix,ncov::Int64,pairsindex::Matrix{Int64},L_str::Matrix,indices,estep::Bool) where T
     # local trs::Int64,trsi::Int64,t1s::Vector{Real}, L1::Matrix{Real}, Phi::Matrix{Real},  t2s::Vector{Real}, L2::Matrix{Real}, Psi::Matrix{Real}, kappa::Vector{Real}, betas::Vector{Real}, propo::Vector{Real}, pg::Matrix{Real}, mu::Vector{Real}, Sigms1::Matrix{Real}, Sigms2::Matrix{Real}, br1::Matrix{Real}, br2::Matrix{Real}, t1::Matrix{Real}, t2::Matrix{Real}, tcfa1::Matrix{Real}, tcfa::Matrix{Real}, tefa1::Matrix{Real}, tefa::Matrix{Real}, plimix::Array{Real}, plimixll::Vector{Real}, Scfa::Matrix{Real}, Rcfa::Matrix{Real}, Bcfa::Matrix{Real}, tcfa3::Vector{Real}, Sefa::Matrix{Real}, Refa::Matrix{Real}, Befa::Matrix{Real}, tefa3::Vector{Real}, cllik::Real
@@ -2714,6 +2627,7 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
 
     par = zeros(Float64,size(lb))
     pair_weights = PML_FAST[] ? pml_pair_category_weights(X,T,pairsindex,c) : nothing
+
     if it == 1
         par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
@@ -2734,6 +2648,14 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
     #     par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),theta_init,LBFGS(),Optim.Options(time_limit = 1200.0)) #20 min
     # end 
     
+    if PML_VERBOSE[]
+        println("M branch=M_parsMixlm restart=", PML_RESTART[], " iter=", it,
+                " fast=", PML_FAST[], " optimizer_converged=", Optim.converged(par),
+                " optimizer_iterations=", hasproperty(par,:iterations) ? getproperty(par,:iterations) : "unknown",
+                " minimum_negQ=", Optim.minimum(par))
+        flush(stdout)
+    end
+
     # mixture parameter
     betas = theta[Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p)+K+1):Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p)+K+ncov)]   # betas = theta[Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p-1)+p+1):Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p-1)+p+ncov)]
     Ez1 = T[:,1,:]
@@ -2883,7 +2805,6 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
         gradlamb2ci = zeros(Float64,K,c+1,size(pairsindex,2),2)
             
         idx = 0
-        nwork = W === nothing ? n : c*c
         @inbounds for i in 1:(p-1)
             @inbounds for j in (i+1):p
                 idx += 1
@@ -2911,17 +2832,9 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                 Psii=Psi[i,i]
                 Psij=Psi[j,j]
 
-                @inbounds for N in 1:nwork
-                    if W === nothing
-                        xni = X[N,i]
-                        xnj = X[N,j]
-                    else
-                        xni = (N-1) % c + 1
-                        xnj = div(N-1,c) + 1
-                        if W[N,1,idx] == 0.0 && W[N,2,idx] == 0.0
-                            continue
-                        end
-                    end
+                @inbounds for N in 1:n
+                    xni = X[N,i]
+                    xnj = X[N,j]
                     t1i = t1[i,xni]
                     t1i1 = t1[i,xni+1]
                     t1j = t1[j,xnj]
@@ -2930,8 +2843,8 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                     t1i1st = (t1i1)/sig1ij[1]
                     t1jst = (t1j)/sig1ij[2]
                     t1j1st = (t1j1)/sig1ij[2]
-                    T1 = W === nothing ? T[N,1,idx][1] : W[N,1,idx]
-                    T2 = W === nothing ? T[N,2,idx][1] : W[N,2,idx]
+                    T1 = T[N,1,idx][1]
+                    T2 = T[N,2,idx][1]
                     t2i = t2[i,xni]
                     t2i1 = t2[i,xni+1]
                     t2j = t2[j,xnj]
@@ -3118,7 +3031,7 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
     if F !== nothing 
   
         if W !== nothing
-            fast_value = 0.0
+            plimix_fast = zeros(Float64,n)
             @inbounds for idx in 1:size(pairsindex,2)
                 i = pairsindex[1,idx]
                 j = pairsindex[2,idx]
@@ -3130,29 +3043,29 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                 sd12 = sqrt(Scfa[2,2])
                 sd21 = sqrt(Sefa[1,1])
                 sd22 = sqrt(Sefa[2,2])
+                lc = zeros(Float64,c,c)
+                le = zeros(Float64,c,c)
                 for category in 1:(c*c)
-                    weight1 = W[category,1,idx]
-                    weight2 = W[category,2,idx]
-                    if weight1 == 0.0 && weight2 == 0.0
-                        continue
-                    end
                     a = (category-1) % c + 1
                     b = div(category-1,c) + 1
-                    if weight1 != 0.0
-                        prob1 = bvnP(t1[i,a]/sd11,t1[i,a+1]/sd11,
-                                     t1[j,b]/sd12,t1[j,b+1]/sd12,rho1,false)
-                        fast_value -= weight1*log(prob1)
+                    if W[category,1,idx] != 0.0
+                        lc[a,b] = log(bvnP(t1[i,a]/sd11,t1[i,a+1]/sd11,
+                                            t1[j,b]/sd12,t1[j,b+1]/sd12,rho1,false))
                     end
-                    if weight2 != 0.0
-                        prob2 = bvnP((t2[i,a]-mu[i])/sd21,(t2[i,a+1]-mu[i])/sd21,
-                                     (t2[j,b]-mu[j])/sd22,(t2[j,b+1]-mu[j])/sd22,rho2,false)
-                        fast_value -= weight2*log(prob2)
+                    if W[category,2,idx] != 0.0
+                        le[a,b] = log(bvnP((t2[i,a]-mu[i])/sd21,(t2[i,a+1]-mu[i])/sd21,
+                                            (t2[j,b]-mu[j])/sd22,(t2[j,b+1]-mu[j])/sd22,rho2,false))
                     end
                 end
+                for N in 1:n
+                    a = X[N,i]
+                    b = X[N,j]
+                    plimix_fast[N] += lc[a,b]*T[N,1,idx] + le[a,b]*T[N,2,idx]
+                end
             end
-            return fast_value
+            return -sum(plimix_fast)
         end
-    
+
         plimix=zeros(Float64,n);
         tcfa1=[t1[j,X[i,j]+1] for i in 1:n, j in 1:p]
         tcfa=[t1[j,X[i,j]] for i in 1:n, j in 1:p]
