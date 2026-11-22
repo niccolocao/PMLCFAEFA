@@ -2627,10 +2627,22 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
 
     par = zeros(Float64,size(lb))
     pair_weights = PML_FAST[] ? pml_pair_category_weights(X,T,pairsindex,c) : nothing
+    fg_callback = (F,G,x) -> begin
+        if pair_weights === nothing
+            return fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,nothing)
+        end
+        if G !== nothing
+            fglm!(nothing,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,nothing)
+        end
+        if F !== nothing
+            return fglm!(F,nothing,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)
+        end
+        return nothing
+    end
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!(fg_callback),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!(fg_callback),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
@@ -2647,6 +2659,14 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
     #     par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),theta_init,LBFGS(),Optim.Options(time_limit = 1200.0)) #20 min
     # end 
     
+    if PML_VERBOSE[]
+        println("M branch=M_parsMixlm restart=", PML_RESTART[], " iter=", it,
+                " fast=", PML_FAST[], " optimizer_converged=", Optim.converged(par),
+                " optimizer_iterations=", hasproperty(par,:iterations) ? getproperty(par,:iterations) : "unknown",
+                " minimum_negQ=", Optim.minimum(par))
+        flush(stdout)
+    end
+
     # mixture parameter
     betas = theta[Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p)+K+1):Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p)+K+ncov)]   # betas = theta[Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p-1)+p+1):Int(trsi+p+(q*(q-1))/2+trs+(p*K-(K*(K-1)/2))+(p-1)+p+ncov)]
     Ez1 = T[:,1,:]
