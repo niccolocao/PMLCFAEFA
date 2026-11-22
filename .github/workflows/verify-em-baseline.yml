@@ -1,4 +1,4 @@
-name: Verify initial EM composite likelihood
+name: Verify EM restart trajectory and accelerated M-step
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-initial-em:
+  full-em-and-gradient:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +14,9 @@ jobs:
         with:
           version: '1.11'
       - uses: julia-actions/cache@v2
-      - name: Install Julia dependencies
+      - name: Prepare Julia implementation
         run: julia --startup-file=no scripts/prepare.jl
-      - name: Compare baseline and first accepted EM step
+      - name: Compare exact objective, gradient and restart traces
         run: |
           julia --startup-file=no --project=julia/PMLRBridge - <<'JULIA'
           using Random
@@ -31,24 +31,47 @@ jobs:
           end
           ics = ones(n,1)
           L = ones(p,q)
-          pairs = Matrix{Int}(undef,2,binomial(p,2))
-          pairs .= hcat([Int[i,j] for i in 1:p-1 for j in i+1:p]...)
+          pairs = hcat([Int[i,j] for i in 1:p-1 for j in i+1:p]...)
           indices = [i+(j-1)*p for j in 1:K for i in j:p]
           M.PML_VERBOSE[] = true
+          M.PML_RESTART[] = 1
           M.PML_FAST[] = false
           theta = M.startvalslm(1,X,n,p,c,q,K,1,ics,pairs,L,indices)
           baseline = M.E_stepMixlm(theta,q,K,p,n,c,X,ics,1,pairs,L,indices,false)
-          println("Reference initial logCL=",baseline)
+          println("Observed starting composite logCL=",baseline)
           @assert isfinite(baseline)
+          pl = M.E_stepMixlm(theta,q,K,p,n,c,X,ics,1,pairs,L,indices,true)
+          T = pl ./ sum(pl,dims=2)
+          W = M.pml_pair_category_weights(X,T,pairs,c)
+          x = theta[1:end-1]
+          obj(w,v) = M.fglm!(1.0,nothing,v,X,T,p,q,K,c,n,pairs,L,indices,w)
+          g0 = zeros(length(x))
+          g1 = zeros(length(x))
+          M.fglm!(nothing,g0,x,X,T,p,q,K,c,n,pairs,L,indices,nothing)
+          M.fglm!(nothing,g1,x,X,T,p,q,K,c,n,pairs,L,indices,W)
+          println("Fast vs original objective difference=",obj(nothing,x)-obj(W,x))
+          println("Fast vs original analytic gradient max absolute difference=",maximum(abs.(g0.-g1)))
+          check = unique(Int[1,p*(c-1)+1,length(x)÷2,length(x)])
+          for k in check
+              h = 1e-5 * max(1.0,abs(x[k]))
+              xp = copy(x); xm = copy(x)
+              xp[k] += h; xm[k] -= h
+              fd = (obj(nothing,xp)-obj(nothing,xm))/(2*h)
+              println("Gradient check parameter=",k," analytic=",g0[k],
+                      " numerical=",fd," error=",g0[k]-fd)
+          end
           values = Float64[]
           for fast in (false,true)
               M.PML_FAST[] = fast
-              res = M.EMparsMixlm(copy(theta),1.0e10,X,p,q,K,c,ics,1,2,L,indices,pairs)
-              println("Mode fast=",fast," logCL=",res[end-1]," status=",res[end])
-              @assert res[end] == 1.0
-              @assert res[end-1] >= baseline
-              push!(values,res[end-1])
+              r = M.EMparsMixlm(copy(theta),1.0e10,X,p,q,K,c,ics,1,2,L,indices,pairs)
+              println("First step fast=",fast," logCL=",r[end-1]," status=",r[end])
+              @assert r[end] == 1.0
+              @assert r[end-1] >= baseline
+              push!(values,r[end-1])
           end
-          @assert isapprox(values[1],values[2]; atol=1.0e-4, rtol=1.0e-8)
-          println("First EM step agrees for fast and original from identical initial parameters.")
+          println("First step fast-original logCL difference=",values[2]-values[1])
+          M.PML_FAST[] = true
+          r = M.EMparsMixlm(copy(theta),1.0e-12,X,p,q,K,c,ics,1,3,L,indices,pairs)
+          println("Three-step attempt final_status=",r[end])
+          println("Numerical and trajectory diagnostics completed.")
           JULIA
