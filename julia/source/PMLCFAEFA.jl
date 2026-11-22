@@ -2139,14 +2139,19 @@ function EMparsMixlm(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsind
     dev=Inf; dev1=Inf; dev2=Inf;
 
     
-    oldlik=-1000000.;
-    oldlik2=1000000.;
-    oldlikA=-1000000.;
-    lik=0.
+    oldlik = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false)
+    isfinite(oldlik) || throw(DomainError(oldlik, "Non-finite initial composite log-likelihood"))
+    oldlik2 = NaN
+    oldlikA = NaN
+    lik = oldlik
+    if PML_VERBOSE[]
+        println("EM branch=EMparsMixlm iter=0 logCL=", oldlik, " initial=true")
+        flush(stdout)
+    end
     
 
     noerror = true; devnostop = true;  sum_devs = 0;
-    while (dev>tol) && it <= maxit && noerror #&& devnostop
+    while (dev>tol) && it < maxit && noerror #&& devnostop
         
         it = it+1;
         param=param01;
@@ -2163,17 +2168,21 @@ function EMparsMixlm(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsind
         lik = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,false);
 
         #Aitken acceleration based stopping criterion p.142 EM algorithm and extensions
-        con = (lik-oldlik)/(oldlik-oldlik2);
-        likA = oldlik + (lik-oldlik)/(1-con)
-        old_dev = dev1
-        dev1 = abs(likA-oldlikA)
+        if it >= 2 && isfinite(oldlik2) && oldlik != oldlik2
+            con = (lik-oldlik)/(oldlik-oldlik2)
+            likA = oldlik + (lik-oldlik)/(1-con)
+            dev1 = isfinite(oldlikA) && isfinite(likA) ? abs(likA-oldlikA) : NaN
+        else
+            likA = NaN
+            dev1 = NaN
+        end
         # dev2 = abs(lik-oldlik)
         
         # println(param01)
         dev = abs(lik-oldlik)#abs(lik-oldlik)/abs(oldlik)
         # println(lik," ",dev," ",dev2," ",dev1," ",oldlik<lik," ",dt)
 
-        noerror = oldlik<lik
+        noerror = isfinite(lik) && lik >= oldlik
 
         oldlikA=likA
         oldlik2=oldlik
@@ -2188,7 +2197,7 @@ function EMparsMixlm(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsind
     plimix = E_stepMixlm(param01,q,K,p,n,c,X,ics,ncov,pairsindex,L_str,indices,true);
     T = repeat(1 ./sum(plimix,dims=2),1,2).*plimix;
 
-    if noerror == true && it<=maxit 
+    if noerror == true && dev <= tol 
         return vcat(param01,vec(plimix),vec(T),lik,1.)
     else
         return vcat(param01,vec(plimix),vec(T),0.,0.)

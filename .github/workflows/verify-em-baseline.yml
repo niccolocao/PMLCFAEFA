@@ -1,0 +1,58 @@
+name: Verify initial EM composite likelihood
+
+on:
+  push:
+    branches: [fix/em-observed-likelihood]
+  workflow_dispatch:
+
+jobs:
+  check-initial-em:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+      - uses: julia-actions/cache@v2
+      - name: Install Julia dependencies
+        run: julia --startup-file=no scripts/prepare.jl
+      - name: Compare baseline and first accepted EM step
+        run: |
+          julia --startup-file=no --project=julia/PMLRBridge - <<'JULIA'
+          using Random
+          include("julia/PMLRBridge/src/PMLRBridge.jl")
+          const M = PMLRBridge.PMLCFAEFA
+          Random.seed!(511)
+          n = 120; p = 5; q = 1; K = 1; c = 4
+          z = randn(n)
+          X = Matrix{Int}(undef,n,p)
+          for j in 1:p, i in 1:n
+              X[i,j] = searchsortedfirst([-0.8,0.0,0.8],z[i]+0.75*randn())
+          end
+          ics = ones(n,1)
+          L = ones(p,q)
+          pairs = Matrix{Int}(undef,2,binomial(p,2))
+          k = 0
+          for i in 1:p-1, j in i+1:p
+              k += 1
+              pairs[:,k] = [i,j]
+          end
+          indices = [i+(j-1)*p for j in 1:K for i in j:p]
+          M.PML_VERBOSE[] = true
+          M.PML_FAST[] = false
+          theta = M.startvalslm(1,X,n,p,c,q,K,1,ics,pairs,L,indices)
+          baseline = M.E_stepMixlm(theta,q,K,p,n,c,X,ics,1,pairs,L,indices,false)
+          println("Reference initial logCL=",baseline)
+          @assert isfinite(baseline)
+          values = Float64[]
+          for fast in (false,true)
+              M.PML_FAST[] = fast
+              res = M.EMparsMixlm(copy(theta),1.0e10,X,p,q,K,c,ics,1,2,L,indices,pairs)
+              println("Mode fast=",fast," logCL=",res[end-1]," status=",res[end])
+              @assert res[end] == 1.0
+              @assert res[end-1] >= baseline
+              push!(values,res[end-1])
+          end
+          @assert isapprox(values[1],values[2]; atol=1.0e-4, rtol=1.0e-8)
+          println("First EM step agrees for fast and original from identical initial parameters.")
+          JULIA
