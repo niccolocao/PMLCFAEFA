@@ -5,7 +5,7 @@ called **from R without installing Julia on the end user's machine**. The
 Julia source code is maintained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. Version 0.1.3 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
+**Status: experimental. Version 0.1.4 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -27,7 +27,7 @@ first. Then execute from the repository root:
 
 ```bash
 ./scripts/build-linux.sh
-R CMD INSTALL PMLCFAEFA_0.1.3.tar.gz
+R CMD INSTALL PMLCFAEFA_0.1.4.tar.gz
 Rscript scripts/smoke.R
 ```
 
@@ -37,12 +37,12 @@ Julia runtime. It may require substantial time, disk, and memory.
 
 ## Installation for an R user without Julia
 
-Transfer `PMLCFAEFA_0.1.3.tar.gz`, generated above or downloaded from the
+Transfer `PMLCFAEFA_0.1.4.tar.gz`, generated above or downloaded from the
 GitHub Actions build artifacts, to a compatible **64-bit Linux** machine.
 Install it using:
 
 ```r
-install.packages("PMLCFAEFA_0.1.3.tar.gz", repos = NULL, type = "source")
+install.packages("PMLCFAEFA_0.1.4.tar.gz", repos = NULL, type = "source")
 library(PMLCFAEFA)
 PMLR_status()
 ```
@@ -131,5 +131,40 @@ also consider relative and Aitken differences. The source replaces
 obsolete Optim `f_tol` and `outer_f_tol` settings with supported
 `f_reltol` and `outer_f_reltol` options to suppress repeated warnings.
 
-The native interface has changed. Rebuild and reinstall version 0.1.3;
+The native interface has changed. Rebuild and reinstall version 0.1.4;
 the existing v0.1.2 library cannot be used with this interface.
+
+## Optional ordinal category aggregation (version 0.1.4)
+
+With `latentmeans = 1` and `fixthrehsolds = 0`, pass `fast = TRUE` to
+`PMLcfaefa()` to aggregate the fixed EM weights by the `c*c` response
+patterns for each item pair during the M-step. `fast = FALSE` is the
+default and retains the original observation-by-observation objective
+and analytic gradient. The E-step and statistical model are not altered.
+
+At a fixed M-step, the weighted sum over individuals is algebraically
+identical to the weighted sum over categories. Floating-point summation
+order changes, so bitwise-equal optimizers and fits are not guaranteed.
+The repository includes `scripts/test-fast.jl`, comparing the original
+and aggregated objective and analytic gradient for multiple model
+dimensions, including BFI-style 42 items. The package build runs these
+tests before publishing the compiled archive. If the tests fail,
+the build must not be treated as validated.
+
+Example:
+
+```r
+fit <- PMLCFAEFA::PMLcfaefa(
+  X, q = 5L, K = 1L, c = 5L,
+  ics = cbind(1, scale(age)),
+  L_str = L_str,
+  latentmeans = 1, fixthrehsolds = 0,
+  fast = TRUE, verbose = TRUE
+)
+```
+
+Run the numerical kernel tests locally after `scripts/prepare.jl`:
+
+```sh
+julia --startup-file=no --project=julia/PMLRBridge scripts/test-fast.jl
+```

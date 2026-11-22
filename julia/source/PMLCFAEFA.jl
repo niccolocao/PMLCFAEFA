@@ -1,6 +1,7 @@
 module PMLCFAEFA
 
 const PML_VERBOSE = Ref(false)
+const PML_FAST = Ref(false)
 
 function pml_em_log(branch, iteration, logcl, delta_stop, delta_aitken, delta_abs, tol, increasing)
     if PML_VERBOSE[]
@@ -807,9 +808,13 @@ end
 ###################################################################################### Functions for Thresholds CFA parametrization #######################################################################################
 
 
-function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixthrehsolds=0.,L_str=false,latentmeans=1.,parametr=false,verbose=false)#param_initialii=false,
+function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixthrehsolds=0.,L_str=false,latentmeans=1.,parametr=false,verbose=false,fast=false)#param_initialii=false,
     local res::Vector{Float64}, Ez1, bets, trcfainit, trefainit,param_initialii
     PML_VERBOSE[] = Bool(verbose)
+    PML_FAST[] = Bool(fast)
+    if fast && !(latentmeans == 1.0 && fixthrehsolds == 0.0)
+        throw(ArgumentError("fast supports latentmeans=1 and fixthrehsolds=0 only"))
+    end
     n = size(X,1); ncov = size(ics,2)
     
     if L_str == false A = reshape(Diagonal(ones(q)),q,q);L_str = kron(A,ones(Int64(p/q))) end
@@ -2708,10 +2713,11 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
     ub=vec(vcat(fill(Inf,trsi),fill(Inf,p),fill(1.,Int((q*(q-1))/2)),fill(Inf,trs),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(Inf,K)));
 
     par = zeros(Float64,size(lb))
+    pair_weights = PML_FAST[] ? pml_pair_category_weights(X,T,pairsindex,c) : nothing
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
@@ -2813,7 +2819,23 @@ function pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
 return f
 end
 
-function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
+function pml_pair_category_weights(X,T,pairsindex,c)
+    n = size(X,1)
+    npairs = size(pairsindex,2)
+    W = zeros(Float64,c*c,2,npairs)
+    @inbounds for pair in 1:npairs
+        i = pairsindex[1,pair]
+        j = pairsindex[2,pair]
+        for r in 1:n
+            category = X[r,i] + (X[r,j]-1)*c
+            W[category,1,pair] += T[r,1,pair]
+            W[category,2,pair] += T[r,2,pair]
+        end
+    end
+    return W
+end
+
+function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
     # do common computations here
     # ...
     trs = (c-1-2)
@@ -2861,6 +2883,7 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
         gradlamb2ci = zeros(Float64,K,c+1,size(pairsindex,2),2)
             
         idx = 0
+        nwork = W === nothing ? n : c*c
         @inbounds for i in 1:(p-1)
             @inbounds for j in (i+1):p
                 idx += 1
@@ -2888,9 +2911,17 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
                 Psii=Psi[i,i]
                 Psij=Psi[j,j]
 
-                @inbounds for N in 1:n
-                    xni = X[N,i]
-                    xnj = X[N,j]
+                @inbounds for N in 1:nwork
+                    if W === nothing
+                        xni = X[N,i]
+                        xnj = X[N,j]
+                    else
+                        xni = (N-1) % c + 1
+                        xnj = div(N-1,c) + 1
+                        if W[N,1,idx] == 0.0 && W[N,2,idx] == 0.0
+                            continue
+                        end
+                    end
                     t1i = t1[i,xni]
                     t1i1 = t1[i,xni+1]
                     t1j = t1[j,xnj]
@@ -2899,8 +2930,8 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
                     t1i1st = (t1i1)/sig1ij[1]
                     t1jst = (t1j)/sig1ij[2]
                     t1j1st = (t1j1)/sig1ij[2]
-                    T1 = T[N,1,idx][1]
-                    T2 = T[N,2,idx][1]
+                    T1 = W === nothing ? T[N,1,idx][1] : W[N,1,idx]
+                    T2 = W === nothing ? T[N,2,idx][1] : W[N,2,idx]
                     t2i = t2[i,xni]
                     t2i1 = t2[i,xni+1]
                     t2j = t2[j,xnj]
@@ -3086,6 +3117,41 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices)
     end
     if F !== nothing 
   
+        if W !== nothing
+            fast_value = 0.0
+            @inbounds for idx in 1:size(pairsindex,2)
+                i = pairsindex[1,idx]
+                j = pairsindex[2,idx]
+                Scfa = Sig1[pairsindex[:,idx],pairsindex[:,idx]]
+                Sefa = Sig2[pairsindex[:,idx],pairsindex[:,idx]]
+                rho1 = cov2cor(Scfa)[1,2]
+                rho2 = cov2cor(Sefa)[1,2]
+                sd11 = sqrt(Scfa[1,1])
+                sd12 = sqrt(Scfa[2,2])
+                sd21 = sqrt(Sefa[1,1])
+                sd22 = sqrt(Sefa[2,2])
+                for category in 1:(c*c)
+                    weight1 = W[category,1,idx]
+                    weight2 = W[category,2,idx]
+                    if weight1 == 0.0 && weight2 == 0.0
+                        continue
+                    end
+                    a = (category-1) % c + 1
+                    b = div(category-1,c) + 1
+                    if weight1 != 0.0
+                        prob1 = bvnP(t1[i,a]/sd11,t1[i,a+1]/sd11,
+                                     t1[j,b]/sd12,t1[j,b+1]/sd12,rho1,false)
+                        fast_value -= weight1*log(prob1)
+                    end
+                    if weight2 != 0.0
+                        prob2 = bvnP((t2[i,a]-mu[i])/sd21,(t2[i,a+1]-mu[i])/sd21,
+                                     (t2[j,b]-mu[j])/sd22,(t2[j,b+1]-mu[j])/sd22,rho2,false)
+                        fast_value -= weight2*log(prob2)
+                    end
+                end
+            end
+            return fast_value
+        end
     
         plimix=zeros(Float64,n);
         tcfa1=[t1[j,X[i,j]+1] for i in 1:n, j in 1:p]

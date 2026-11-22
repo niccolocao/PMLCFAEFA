@@ -16,7 +16,7 @@ fit <- PMLcfaefa(
   X, q = 1L, K = 1L, c = 4L,
   ics = matrix(1, n, 1),
   tol = 1e-2, maxit = 50L, maxNumRestart = 2L, replix = 2L,
-  verbose = TRUE
+  verbose = TRUE, fast = TRUE
 )
 stopifnot(inherits(fit, "pmlcfaefa_fit"), length(fit$raw) > 10)
 cat("Julia returned a model result to R.\n")
