@@ -5,7 +5,7 @@ called **from R without installing Julia on the end user's machine**. The
 Julia source code is maintained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. Version 0.1.4 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
+**Status: experimental. Version 0.1.5 calls the compiled Julia model in the R process. A native crash can terminate R or RStudio, and numerical equivalence with the original Julia implementation is not yet validated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -27,7 +27,7 @@ first. Then execute from the repository root:
 
 ```bash
 ./scripts/build-linux.sh
-R CMD INSTALL PMLCFAEFA_0.1.4.tar.gz
+R CMD INSTALL PMLCFAEFA_0.1.5.tar.gz
 Rscript scripts/smoke.R
 ```
 
@@ -37,12 +37,12 @@ Julia runtime. It may require substantial time, disk, and memory.
 
 ## Installation for an R user without Julia
 
-Transfer `PMLCFAEFA_0.1.4.tar.gz`, generated above or downloaded from the
+Transfer `PMLCFAEFA_0.1.5.tar.gz`, generated above or downloaded from the
 GitHub Actions build artifacts, to a compatible **64-bit Linux** machine.
 Install it using:
 
 ```r
-install.packages("PMLCFAEFA_0.1.4.tar.gz", repos = NULL, type = "source")
+install.packages("PMLCFAEFA_0.1.5.tar.gz", repos = NULL, type = "source")
 library(PMLCFAEFA)
 PMLR_status()
 ```
@@ -131,22 +131,30 @@ also consider relative and Aitken differences. The source replaces
 obsolete Optim `f_tol` and `outer_f_tol` settings with supported
 `f_reltol` and `outer_f_reltol` options to suppress repeated warnings.
 
-The native interface has changed. Rebuild and reinstall version 0.1.4;
+The native interface has changed. Rebuild and reinstall version 0.1.5;
 the existing v0.1.2 library cannot be used with this interface.
 
-## Optional ordinal category aggregation (version 0.1.4)
+## Optional ordinal pair probability caching (version 0.1.5)
 
-With `latentmeans = 1` and `fixthrehsolds = 0`, pass `fast = TRUE` to
-`PMLcfaefa()` to aggregate the fixed EM weights by the `c*c` response
-patterns for each item pair during the M-step. `fast = FALSE` is the
-default and retains the original observation-by-observation objective
-and analytic gradient. The E-step and statistical model are not altered.
+With `latentmeans = 1` and `fixthrehsolds = 0`, use `fast = TRUE` to
+calculate the bivariate probabilities once for each observed category
+combination in the M-step objective. The original observation order in
+the objective and the original analytical gradient are **preserved**.
+The default `fast = FALSE` retains the unmodified objective evaluation.
 
-At a fixed M-step, the weighted sum over individuals is algebraically
-identical to the weighted sum over categories. Floating-point summation
-order changes, so bitwise-equal optimizers and fits are not guaranteed.
-The two implementations were compared numerically during development. The
-test script is not distributed with the package.
+The earlier implementation aggregated the analytical gradient and could
+change the limited-memory optimizer's trajectory despite algebraic
+equivalence. This has been removed. Tests with the same Julia starting
+parameters confirmed zero objective difference, zero gradient difference,
+and identical model parameters across three EM iterations in the tested
+synthetic configuration. Full empirical BFI-42 equivalence and end-to-end
+speedups have not been established.
+
+Set `verbose = TRUE` to see `PML restart` followed by every EM iteration,
+including `iter=0` (initial observed composite log-likelihood), `logCL`
+(which should not decrease), `negLogCL` (which should not increase),
+iteration changes and elapsed M-step time. Convergence is checked against
+the actual preceding likelihood, never an arbitrary fixed value.
 
 Example:
 
@@ -159,4 +167,3 @@ fit <- PMLCFAEFA::PMLcfaefa(
   fast = TRUE, verbose = TRUE
 )
 ```
-
