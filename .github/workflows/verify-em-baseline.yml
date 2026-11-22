@@ -70,6 +70,43 @@ jobs:
               push!(values,r[end-1])
           end
           println("First step fast-original logCL difference=",values[2]-values[1])
+          trsi = (c-1)*p
+          trs = (c-3)*p
+          lb = vcat(fill(-Inf,trsi),fill(-Inf,p),fill(-1.0,q*(q-1)÷2),
+                    fill(-Inf,trs),fill(-Inf,length(indices)),fill(1.0e-6,p),fill(-Inf,K))
+          ub = vcat(fill(Inf,trsi),fill(Inf,p),fill(1.0,q*(q-1)÷2),
+                    fill(Inf,trs),fill(Inf,length(indices)),fill(Inf,p),fill(Inf,K))
+          function optcombo(Wf,Wg)
+              fg! = (F,G,v) -> begin
+                  if G !== nothing
+                      M.fglm!(nothing,G,v,X,T,p,q,K,c,n,pairs,L,indices,Wg)
+                  end
+                  if F !== nothing
+                      return M.fglm!(1.0,nothing,v,X,T,p,q,K,c,n,pairs,L,indices,Wf)
+                  end
+                  return nothing
+              end
+              return M.Optim.optimize(M.Optim.NLSolversBase.only_fg!(fg!),
+                    lb,ub,copy(x),M.Optim.Fminbox(M.Optim.LBFGS()),
+                    M.Optim.Options(f_reltol=1e-6,outer_f_reltol=1e-6,time_limit=300.0))
+          end
+          sols = Any[]
+          for (name,Wf,Wg) in (("original_original",nothing,nothing),
+                               ("cached_objective_original_gradient",W,nothing),
+                               ("original_objective_aggregated_gradient",nothing,W),
+                               ("cached_cached",W,W))
+              sol = optcombo(Wf,Wg)
+              println("Optimization combo=",name,
+                      " objective=",M.Optim.minimum(sol),
+                      " converged=",M.Optim.converged(sol),
+                      " iterations=",hasproperty(sol,:iterations) ? getproperty(sol,:iterations) : "unknown")
+              push!(sols,sol)
+          end
+          for k in 2:4
+              println("Optimization difference combo=",k,
+                      " fmin_minus_reference=",M.Optim.minimum(sols[k])-M.Optim.minimum(sols[1]),
+                      " max_param_diff=",maximum(abs.(M.Optim.minimizer(sols[k]).-M.Optim.minimizer(sols[1]))))
+          end
           M.PML_FAST[] = true
           r = M.EMparsMixlm(copy(theta),1.0e-12,X,p,q,K,c,ics,1,3,L,indices,pairs)
           println("Three-step attempt final_status=",r[end])
