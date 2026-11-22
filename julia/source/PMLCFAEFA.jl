@@ -2627,22 +2627,11 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
 
     par = zeros(Float64,size(lb))
     pair_weights = PML_FAST[] ? pml_pair_category_weights(X,T,pairsindex,c) : nothing
-    fg_callback = (F,G,x) -> begin
-        if pair_weights === nothing
-            return fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,nothing)
-        end
-        if G !== nothing
-            fglm!(nothing,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,nothing)
-        end
-        if F !== nothing
-            return fglm!(F,nothing,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)
-        end
-        return nothing
-    end
+
     if it == 1
-        par = optimize(Optim.only_fg!(fg_callback),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!(fg_callback),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices,pair_weights)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
@@ -2816,7 +2805,6 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
         gradlamb2ci = zeros(Float64,K,c+1,size(pairsindex,2),2)
             
         idx = 0
-        nwork = W === nothing ? n : c*c
         @inbounds for i in 1:(p-1)
             @inbounds for j in (i+1):p
                 idx += 1
@@ -2844,17 +2832,9 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                 Psii=Psi[i,i]
                 Psij=Psi[j,j]
 
-                @inbounds for N in 1:nwork
-                    if W === nothing
-                        xni = X[N,i]
-                        xnj = X[N,j]
-                    else
-                        xni = (N-1) % c + 1
-                        xnj = div(N-1,c) + 1
-                        if W[N,1,idx] == 0.0 && W[N,2,idx] == 0.0
-                            continue
-                        end
-                    end
+                @inbounds for N in 1:n
+                    xni = X[N,i]
+                    xnj = X[N,j]
                     t1i = t1[i,xni]
                     t1i1 = t1[i,xni+1]
                     t1j = t1[j,xnj]
@@ -2863,8 +2843,8 @@ function fglm!(F, G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices, W=nothing)
                     t1i1st = (t1i1)/sig1ij[1]
                     t1jst = (t1j)/sig1ij[2]
                     t1j1st = (t1j1)/sig1ij[2]
-                    T1 = W === nothing ? T[N,1,idx][1] : W[N,1,idx]
-                    T2 = W === nothing ? T[N,2,idx][1] : W[N,2,idx]
+                    T1 = T[N,1,idx][1]
+                    T2 = T[N,2,idx][1]
                     t2i = t2[i,xni]
                     t2i1 = t2[i,xni+1]
                     t2j = t2[j,xnj]
