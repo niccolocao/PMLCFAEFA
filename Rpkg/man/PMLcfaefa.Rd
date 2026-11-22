@@ -6,7 +6,7 @@ PMLcfaefa(X, p = ncol(X), q, K, c = max(X),
   ics = matrix(1, nrow(X), 1), tol = 1e-6,
   maxit = 1000L, maxNumRestart = 20L, replix = 10L,
   fixthrehsolds = 0, L_str = FALSE,
-  latentmeans = 1, parametr = FALSE)
+  latentmeans = 1, parametr = FALSE, verbose = FALSE)
 }
 \arguments{
 \item{X}{An \code{n x p} matrix of integer category responses, coded from 1 to \code{c}.}
@@ -23,6 +23,7 @@ PMLcfaefa(X, p = ncol(X), q, K, c = max(X),
 \item{L_str}{FALSE for the default CFA loading structure, or a numeric \code{p x q} matrix.}
 \item{latentmeans}{Original Julia latent mean mode (0, 1, or 2).}
 \item{parametr}{Not supported in the initial native bridge; keep FALSE.}
+\item{verbose}{Logical. If TRUE, print the composite log-likelihood and the actual stopping differences at every EM iteration. FALSE by default. The primary stopping difference is absolute for latentmeans = 1 and fixthrehsolds = 0, and relative in the other supported branches.}
 }
 \value{An object of class \code{pmlcfaefa_fit} with elements \code{raw},
 \code{status_code}, \code{restart_count}, \code{n}, \code{p}, \code{q},

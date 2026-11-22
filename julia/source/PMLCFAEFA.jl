@@ -1,4 +1,20 @@
 module PMLCFAEFA
+
+const PML_VERBOSE = Ref(false)
+
+function pml_em_log(branch, iteration, logcl, delta_stop, delta_aitken, delta_abs, tol, increasing)
+    if PML_VERBOSE[]
+        println("EM branch=", branch, " iter=", iteration,
+                " logCL=", logcl,
+                " delta_stop=", delta_stop,
+                " delta_abs=", delta_abs,
+                " delta_aitken=", delta_aitken,
+                " tol=", tol, " increasing=", increasing)
+        flush(stdout)
+    end
+    return nothing
+end
+
 #slurm98.
 
 
@@ -791,14 +807,19 @@ end
 ###################################################################################### Functions for Thresholds CFA parametrization #######################################################################################
 
 
-function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixthrehsolds=0.,L_str=false,latentmeans=1.,parametr=false)#param_initialii=false,
+function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixthrehsolds=0.,L_str=false,latentmeans=1.,parametr=false,verbose=false)#param_initialii=false,
     local res::Vector{Float64}, Ez1, bets, trcfainit, trefainit,param_initialii
+    PML_VERBOSE[] = Bool(verbose)
     n = size(X,1); ncov = size(ics,2)
     
     if L_str == false A = reshape(Diagonal(ones(q)),q,q);L_str = kron(A,ones(Int64(p/q))) end
     pairsindex=mapreduce(permutedims,hcat,collect(combinations(1:p,2))');
     iter_err = 1; code_error = 0.0;  err_0_count = 0; A2 = diagm(ones(K));  indices = [i + (j - 1) * p for j in 1:K for i in j:p]   
     while code_error == 0.0
+        if PML_VERBOSE[]
+            println("PML restart=", iter_err)
+            flush(stdout)
+        end
         # println("Restart: n. ", iter_err)
 
         # replix = 10
@@ -897,7 +918,7 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
         #     paramcfa = vcat(vec(trcfainit),rand(Uniform(0.1,1),p),rand(Uniform(1e-3,1),Int(q*(q-1)/2)))
         #     lb=vec(vcat(fill(-5,(c-1)),fill(0.001,p),fill(-1.,Int((q*(q-1))/2))))#,fill(0.0001,p)));fill(-5,(c-1)).+repeat(collect(0:(c-2)),inner=p)
         #     ub=vec(vcat(fill(5,(c-1)),fill(1.,p),fill(1.,Int((q*(q-1))/2))))#,fill(4,p))); vcat(fill(5,(c-1)).-repeat(collect((c-2):-1:0),inner=p)
-        #     parcfa = optimize(param ->pmlcfath(param,p,q,c,X[Bool.(round.(Ez1)),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+        #     parcfa = optimize(param ->pmlcfath(param,p,q,c,X[Bool.(round.(Ez1)),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
     
 
         #     tau1=parcfa.minimizer[(1):((c-1))]
@@ -907,7 +928,7 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
         #     paramefa = vcat(rand(Uniform(0.1,1.),Int(p*K-(K*(K-1)/2))),rand(Uniform(0.1,3),p),rand(Uniform(0.5,2),p))# sort(rand(Uniform(1.2,4),p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p))
         #     lb=vec(vcat(fill(1e-3,Int((p*K-(K*(K-1)/2)))),fill(0.001,p),fill(-10,p)))#,fill(0.0001,p))); .+repeat(collect(0:(c-2-2)),inner=p)
         #     ub=vec(vcat(fill(1.,Int((p*K-(K*(K-1)/2)))),fill(3.,p),fill(10.,p)))#,fill(4,p)));  .-repeat(collect((c-2-2):-1:0),inner=p)
-        #     parefa = optimize(param ->pmlefathfixed(param,p,K,c,X[Bool.(1 .-Ez1),:],indices,tau1),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+        #     parefa = optimize(param ->pmlefathfixed(param,p,K,c,X[Bool.(1 .-Ez1),:],indices,tau1),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
         #     # in case of very strong straightlining
         #     # if parefa.minimizer[((c-1-2)*p+1):Int((c+1+2)*p+(p*K-(K*(K-1)/2)))] .== ones(Float64,Int(p*K-(K*(K-1)/2)))
@@ -937,13 +958,13 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
         #     # paramcfa = vcat(sort(rand(Uniform(-4.9,-2.3),p*(c-1))).+repeat(collect(0:(c-2)),inner=p),rand(Uniform(0.11,0.9),p),rand(Uniform(-0.9,0.9),Int(q*(q-1)/2)))
         #     # lb=vec(vcat(fill(-5,p*(c-1)).+repeat(collect(0:(c-2)),inner=p),fill(0.1001,p),fill(-0.9,Int((q*(q-1))/2))))#,fill(0.0001,p)));
         #     # ub=vec(vcat(fill(3,p*(c-1)).-repeat(collect((c-2):-1:0),inner=p),fill(0.9,p),fill(0.9,Int((q*(q-1))/2))))#,fill(4,p)));
-        #     # parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+        #     # parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
         #     # # 3. EFA ordinal PML
         #     # paramefa = vcat(sort(rand(Uniform(1.2,4),p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p)),rand(Uniform(0.11,0.9),Int(p*K-(K*(K-1)/2))),rand(Uniform(0.1,2.9),p),rand(Uniform(-9.90,9.90),p)) 
         #     # lb=vec(vcat(fill(1.1,p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p),fill(0.10001,Int((p*K-(K*(K-1)/2)))),fill(0.101,p),fill(-9.90,p)))#,fill(0.0001,p)));
         #     # ub=vec(vcat(fill(6,p*(c-1-2)).-repeat(collect((c-2-2):-1:0),inner=p),fill(0.9,Int((p*K-(K*(K-1)/2)))),fill(2.9,p),fill(9.90,p)))#,fill(4,p)));
-        #     # parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:]),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+        #     # parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:]),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 
         #     # param_init = vcat(parcfa.minimizer.+rand(Uniform(-0.1,0.1),size(parcfa.minimizer,1)),parefa.minimizer.+rand(Uniform(-0.1,0.1),size(parefa.minimizer,1)),sum(Ez1)/n)
@@ -1049,7 +1070,7 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
                     param_initialii = startvalslm(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
                     res =  EMparsMixlm(param_initialii,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
                 elseif fixthrehsolds == -1.
-                    println("millsap binary")
+                    PML_VERBOSE[] && println("millsap binary")
                     # Millsap parametrization: invariant EFA thresholds fixed to the CFA ones
                     param_initialii = startvalslmbin(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
                     res =  EMparsMixlmbin(param_initialii,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
@@ -1063,7 +1084,7 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
                     res =  EMparsMixth(param_initialii,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
                 elseif fixthrehsolds == 3.
                     # Thresholds invarianti + latent means EFA + Psi
-                    println("t invariant but one set of per item")
+                    PML_VERBOSE[] && println("t invariant but one set of per item")
                     if parametr != false
                         param_initialii = parametr
                     else
@@ -1075,7 +1096,7 @@ function PMLcfaefa(X,p,q,K,c,ics,tol,maxit, maxNumRestart::Int64,replix=10,fixth
                     param_initialii = startvalslminv(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
                     res =  EMparsMixlminv(param_initialii,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
                 elseif fixthrehsolds == 5.
-                    println("t invariant and equal between-items")
+                    PML_VERBOSE[] && println("t invariant and equal between-items")
                     # Threhsolds invarianti e unici + latent means EFA + Psi
                     param_initialii = startvalsthinv(replix,X,n,p,c,q,K,ncov,ics,pairsindex,L_str,indices)
                     res =  EMparsMixthinv(param_initialii,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex)
@@ -1194,7 +1215,7 @@ end
 #             paramcfa = vcat(vec(trcfainit),rand(Uniform(0.1,1),p),rand(Uniform(1e-3,1),Int(q*(q-1)/2)))
 #             lb=vec(vcat(fill(-5,p*(c-1)),fill(0.001,p),fill(1e-3,Int((q*(q-1))/2))))#,fill(0.0001,p)));fill(-5,p*(c-1)).+repeat(collect(0:(c-2)),inner=p)
 #             ub=vec(vcat(fill(5,p*(c-1)),fill(1.,p),fill(1.,Int((q*(q-1))/2))))#,fill(4,p))); vcat(fill(5,p*(c-1)).-repeat(collect((c-2):-1:0),inner=p)
-#             parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#             parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
     
 #             # 3. EFA ordinal PML
 #             if c > 4
@@ -1206,7 +1227,7 @@ end
 #             paramefa = vcat(vec(trefainit),rand(Uniform(0.1,1.),Int(p*K-(K*(K-1)/2))),rand(Uniform(0.1,3),p),rand(Uniform(0.5,2),p))# sort(rand(Uniform(1.2,4),p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p))
 #             lb=vec(vcat(fill(1,p*(c-1-2)),fill(1e-3,Int((p*K-(K*(K-1)/2)))),fill(0.001,p),fill(-10,p)))#,fill(0.0001,p))); .+repeat(collect(0:(c-2-2)),inner=p)
 #             ub=vec(vcat(fill(7,p*(c-1-2)),fill(1.,Int((p*K-(K*(K-1)/2)))),fill(3.,p),fill(10.,p)))#,fill(4,p)));  .-repeat(collect((c-2-2):-1:0),inner=p)
-#             parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:],indices),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#             parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:],indices),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #             # in case of very strong straightlining
 #             # if parefa.minimizer[((c-1-2)*p+1):Int((c+1+2)*p+(p*K-(K*(K-1)/2)))] .== ones(Float64,Int(p*K-(K*(K-1)/2)))
@@ -1240,13 +1261,13 @@ end
 #             # paramcfa = vcat(sort(rand(Uniform(-4.9,-2.3),p*(c-1))).+repeat(collect(0:(c-2)),inner=p),rand(Uniform(0.11,0.9),p),rand(Uniform(-0.9,0.9),Int(q*(q-1)/2)))
 #             # lb=vec(vcat(fill(-5,p*(c-1)).+repeat(collect(0:(c-2)),inner=p),fill(0.1001,p),fill(-0.9,Int((q*(q-1))/2))))#,fill(0.0001,p)));
 #             # ub=vec(vcat(fill(3,p*(c-1)).-repeat(collect((c-2):-1:0),inner=p),fill(0.9,p),fill(0.9,Int((q*(q-1))/2))))#,fill(4,p)));
-#             # parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#             # parcfa = optimize(param ->pmlcfa(param,p,q,c,X[Bool.(Ez1),:],L_str),lb,ub,paramcfa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #             # # 3. EFA ordinal PML
 #             # paramefa = vcat(sort(rand(Uniform(1.2,4),p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p)),rand(Uniform(0.11,0.9),Int(p*K-(K*(K-1)/2))),rand(Uniform(0.1,2.9),p),rand(Uniform(-9.90,9.90),p)) 
 #             # lb=vec(vcat(fill(1.1,p*(c-1-2)).+repeat(collect(0:(c-2-2)),inner=p),fill(0.10001,Int((p*K-(K*(K-1)/2)))),fill(0.101,p),fill(-9.90,p)))#,fill(0.0001,p)));
 #             # ub=vec(vcat(fill(6,p*(c-1-2)).-repeat(collect((c-2-2):-1:0),inner=p),fill(0.9,Int((p*K-(K*(K-1)/2)))),fill(2.9,p),fill(9.90,p)))#,fill(4,p)));
-#             # parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:]),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#             # parefa = optimize(param ->pmlefa(param,p,K,c,X[Bool.(1 .-Ez1),:]),lb,ub,paramefa,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 
 #             # param_init = vcat(parcfa.minimizer.+rand(Uniform(-0.1,0.1),size(parcfa.minimizer,1)),parefa.minimizer.+rand(Uniform(-0.1,0.1),size(parefa.minimizer,1)),sum(Ez1)/n)
@@ -1404,6 +1425,7 @@ function EMparsMix(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsindex
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMix", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -1563,13 +1585,13 @@ function M_parsMix(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,time
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fg!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -2151,6 +2173,7 @@ function EMparsMixlm(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsind
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixlm", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -2686,17 +2709,17 @@ function M_parsMixlm(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fglm!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlm(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
     # dfc = TwiceDifferentiableConstraints(lb, ub)
-    # par = optimize(func,dfc,theta_init,IPNewton(),Optim.Options(iterations=10000,f_tol=1.0000e-06))
+    # par = optimize(func,dfc,theta_init,IPNewton(),Optim.Options(iterations=10000,f_reltol=1.0000e-06))
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -3805,6 +3828,7 @@ function EMparsMixlmbin(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairs
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixlmbin", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -4062,17 +4086,17 @@ function M_parsMixlmbin(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglmbin!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fglmbin!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglmbin!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fglmbin!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
     # func = TwiceDifferentiable((x)->pmllastlmbin(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),(G,x)->fun_grad!(G, x,X,T,p,q,K,c,n,pairsindex,L_str,indices),theta_init; autodiff=:forward);
     # dfc = TwiceDifferentiableConstraints(lb, ub)
-    # par = optimize(func,dfc,theta_init,IPNewton(),Optim.Options(iterations=10000,f_tol=1.0000e-06))
+    # par = optimize(func,dfc,theta_init,IPNewton(),Optim.Options(iterations=10000,f_reltol=1.0000e-06))
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -4566,6 +4590,7 @@ function EMparsMixinv(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsin
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixinv", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -4760,13 +4785,13 @@ function M_parsMixinv(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,t
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -5383,13 +5408,13 @@ end
 
 #     par = zeros(Float64,size(lb))
 #     if it == 1
-#         par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+#         par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
 #     elseif it > 1
-#         par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+#         par = optimize(Optim.only_fg!((F,G,x)->fginv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
 #     end 
 
 
-#     # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#     # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #     # par = zeros(Float64,size(lb))
 #     # if it == 1
@@ -6047,6 +6072,7 @@ function EMparsMixthinv(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairs
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixthinv", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -6170,13 +6196,13 @@ function M_parsMixthinv(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -6759,13 +6785,13 @@ end
 
 #     par = zeros(Float64,size(lb))
 #     if it == 1
-#         par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+#         par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
 #     elseif it > 1
-#         par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+#         par = optimize(Optim.only_fg!((F,G,x)->fgthinv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
 #     end 
 
 
-#     # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#     # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #     # par = zeros(Float64,size(lb))
 #     # if it == 1
@@ -7182,6 +7208,7 @@ function EMparsMixlminv(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairs
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixlminv", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -7305,13 +7332,13 @@ function M_parsMixlminv(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglminv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fglminv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fglminv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fglminv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -7723,6 +7750,7 @@ function EMparsMixl2inv(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairs
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixl2inv", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -7844,13 +7872,13 @@ function M_parsMixl2inv(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it
 
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgl2inv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0))
+        par = optimize(Optim.only_fg!((F,G,x)->fgl2inv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min ,Optim.Options(iterations=1000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0))
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgl2inv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06, time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgl2inv!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06, time_limit = 300.0)) #20 min
     end 
 
 
-    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+    # par = optimize(x->pmllast(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
     # par = zeros(Float64,size(lb))
     # if it == 1
@@ -8348,9 +8376,9 @@ end
 #     ub=vec(vcat(fill(7.,trsi),fill(1.,p),fill(3.,p),fill(1.,Int((q*(q-1))/2)),fill(7.,trsi),fill(1,Int(p*K-K*(K-1)/2)),fill(2.,p),fill(8.,p)));
 #     # func = TwiceDifferentiable(param -> pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),theta[1:(size(theta,1)-1)]; autodiff=:forward);
 #     # dfc = TwiceDifferentiableConstraints(lb, ub)
-#     # par = optimize(func,dfc,theta[1:(size(theta,1)-1)],IPNewton(),Optim.Options(iterations=10000,f_tol=1.0000e-06))
+#     # par = optimize(func,dfc,theta[1:(size(theta,1)-1)],IPNewton(),Optim.Options(iterations=10000,f_reltol=1.0000e-06))
     
-#     par = optimize(param ->pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),lb,ub,theta[1:(size(theta,1)-1)],Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#     par = optimize(param ->pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),lb,ub,theta[1:(size(theta,1)-1)],Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #     pg = 0.
 #     if size(T,3) > 1
@@ -8614,9 +8642,9 @@ end
 #     ub=vec(vcat(fill(7.,trsi),fill(1.,p),fill(3.,p),fill(1.,Int((q*(q-1))/2)),fill(8,p),fill(7.,trsi),fill(1,Int(p*K-K*(K-1)/2)),fill(2.,p),fill(8.,p)));
 #     # func = TwiceDifferentiable(param -> pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),theta[1:(size(theta,1)-1)]; autodiff=:forward);
 #     # dfc = TwiceDifferentiableConstraints(lb, ub)
-#     # par = optimize(func,dfc,theta[1:(size(theta,1)-1)],IPNewton(),Optim.Options(iterations=10000,f_tol=1.0000e-06))
+#     # par = optimize(func,dfc,theta[1:(size(theta,1)-1)],IPNewton(),Optim.Options(iterations=10000,f_reltol=1.0000e-06))
     
-#     par = optimize(param ->pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),lb,ub,theta[1:(size(theta,1)-1)],Fminbox(LBFGS()),Optim.Options(iterations=10000,f_tol=1.0000e-06,outer_f_tol=1.0000e-06);autodiff=:forward)
+#     par = optimize(param ->pmlmix(param,X,T,p,q,K,c,n,pairsindex,L_str,L2_str),lb,ub,theta[1:(size(theta,1)-1)],Fminbox(LBFGS()),Optim.Options(iterations=10000,f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06);autodiff=:forward)
 
 #     pg = 0.
 #     if size(T,3) > 1
@@ -9357,6 +9385,7 @@ function EMparsMixth(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairsind
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixth", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -9778,9 +9807,9 @@ function M_parsMixth(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it,ti
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(7.,trs),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
 
     
@@ -9926,6 +9955,7 @@ function EMparsMixonlyth(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pair
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixonlyth", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -10298,9 +10328,9 @@ function M_parsMixonlyth(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,i
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
 
     
@@ -10449,6 +10479,7 @@ function EMparsMixonlyth01(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pa
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixonlyth01", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -10821,9 +10852,9 @@ function M_parsMixonlyth01(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
 
     
@@ -10972,6 +11003,7 @@ function EMparsMixonlyth01intercCFA(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,i
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixonlyth01intercCFA", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -11360,9 +11392,9 @@ function M_parsMixonlyth01intercCFA(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_st
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(5.,p),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth01intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
 
     
@@ -11505,6 +11537,7 @@ function EMparsMixonlyth0intercCFA(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,in
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixonlyth0intercCFA", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -11893,9 +11926,9 @@ function M_parsMixonlyth0intercCFA(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(5.,p),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth0intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth0intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth0intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgonlyth0intercCFA!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
 
     
@@ -11985,6 +12018,7 @@ function EMparsMixthefa(param01,tol,X,p,q,K,c,ics,ncov,maxit,L_str,indices,pairs
         oldlikA=likA
         oldlik2=oldlik
         oldlik=lik;
+        pml_em_log("EMparsMixthefa", it, lik, dev, dev1, abs(lik - oldlik2), tol, noerror)
 
         # sum_devs += dev > old_dev
         # devstop = sum_devs <= 3
@@ -12412,9 +12446,9 @@ function M_parsMixthefa(T,theta,X,n,p,q,K,c,ics,ncov,pairsindex,L_str,indices,it
     ub=vec(vcat(fill(5.1,trsi),fill(1.,p),fill(1.,Int((q*(q-1))/2)),fill(7.,trs),fill(Inf,Int(p*K-K*(K-1)/2)),fill(Inf,p),fill(10.,p)));    
     par = zeros(Float64,size(lb))
     if it == 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgthefa!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 300.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgthefa!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 300.0)) #20 min
     elseif it > 1
-        par = optimize(Optim.only_fg!((F,G,x)->fgthefa!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_tol=1.0000e-06,outer_f_tol=1.0000e-06,time_limit = 1200.0)) #20 min
+        par = optimize(Optim.only_fg!((F,G,x)->fgthefa!(F,G,x,X,T,p,q,K,c,n,pairsindex,L_str,indices)),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(f_reltol=1.0000e-06,outer_f_reltol=1.0000e-06,time_limit = 1200.0)) #20 min
     end 
     # if it == 1
     #     par = optimize((x)->pmlthefa(x,X,T,p,q,K,c,n,pairsindex,L_str,indices),lb,ub,theta_init,Fminbox(LBFGS()),Optim.Options(time_limit = 300.0);autodiff=:forward)#20 min

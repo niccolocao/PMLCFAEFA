@@ -30,7 +30,7 @@ typedef void (*init_julia_fn)(int, char **);
 typedef int32_t (*fit_fn)(const int64_t *, const double *,
                          int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
                          double, int32_t, int32_t, int32_t, double, double,
-                         const double *, int32_t);
+                         const double *, int32_t, int32_t);
 typedef int32_t (*length_fn)(void);
 typedef int32_t (*copy_fn)(double *, int32_t);
 typedef int32_t (*error_fn)(unsigned char *, int32_t);
@@ -132,7 +132,7 @@ static double dblarg(SEXP arg, const char *label) {
 
 SEXP C_pmlr_fit(SEXP xS, SEXP covS, SEXP qS, SEXP kS, SEXP cS,
                 SEXP tolS, SEXP maxitS, SEXP maxrestS, SEXP replixS,
-                SEXP fixS, SEXP loadingS, SEXP latentS) {
+                SEXP fixS, SEXP loadingS, SEXP latentS, SEXP verboseS) {
     if (!initialized)
         Rf_error("Call Julia runtime initialization first");
     if (TYPEOF(xS) != INTSXP && TYPEOF(xS) != REALSXP)
@@ -159,6 +159,8 @@ SEXP C_pmlr_fit(SEXP xS, SEXP covS, SEXP qS, SEXP kS, SEXP cS,
     double tol = dblarg(tolS, "tol");
     double fix = dblarg(fixS, "fixthrehsolds");
     double latent = dblarg(latentS, "latentmeans");
+    int32_t verbose = intarg(verboseS, "verbose");
+    if (verbose != 0 && verbose != 1) Rf_error("verbose must be FALSE or TRUE");
 
     R_xlen_t cells = XLENGTH(xS);
     int64_t *x = (int64_t *)R_alloc((size_t)cells, sizeof(int64_t));
@@ -181,7 +183,7 @@ SEXP C_pmlr_fit(SEXP xS, SEXP covS, SEXP qS, SEXP kS, SEXP cS,
 
     int32_t status = call_fit(x, REAL(covS), n, p, q, k, c, ncov,
                               tol, maxit, maxrest, replix, fix, latent,
-                              loading, has_loading);
+                              loading, has_loading, verbose);
     if (status != 0) {
         unsigned char message[4096] = {0};
         last_error(message, (int32_t)sizeof(message));
@@ -201,7 +203,7 @@ SEXP C_pmlr_fit(SEXP xS, SEXP covS, SEXP qS, SEXP kS, SEXP cS,
 
 static const R_CallMethodDef CallEntries[] = {
     {"C_pmlr_init", (DL_FUNC)&C_pmlr_init, 1},
-    {"C_pmlr_fit", (DL_FUNC)&C_pmlr_fit, 12},
+    {"C_pmlr_fit", (DL_FUNC)&C_pmlr_fit, 13},
     {NULL, NULL, 0}
 };
 

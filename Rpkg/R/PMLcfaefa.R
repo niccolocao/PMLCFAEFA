@@ -24,7 +24,7 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
                       ics = matrix(1, nrow(X), 1), tol = 1e-6,
                       maxit = 1000L, maxNumRestart = 20L, replix = 10L,
                       fixthrehsolds = 0, L_str = FALSE,
-                      latentmeans = 1, parametr = FALSE) {
+                      latentmeans = 1, parametr = FALSE, verbose = FALSE) {
   X <- as.matrix(X)
   if (!is.numeric(X) || anyNA(X) || any(!is.finite(X)) ||
       any(X != round(X))) stop("X must contain finite integer-valued categories.", call. = FALSE)
@@ -34,6 +34,8 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
     stop("p must equal ncol(X).", call. = FALSE)
   if (any(X < 1) || any(X > c))
     stop("X must contain categories between 1 and c.", call. = FALSE)
+  if (!is.logical(verbose) || length(verbose) != 1L || is.na(verbose))
+    stop("verbose must be TRUE or FALSE.", call. = FALSE)
   if (!identical(parametr, FALSE))
     stop("Custom 'parametr' initialization is not yet supported by the native R interface.", call. = FALSE)
   if (length(q) != 1L || length(K) != 1L || q < 1 || K < 1 ||
@@ -69,7 +71,7 @@ PMLcfaefa <- function(X, p = ncol(X), q, K, c = max(X),
   raw <- .Call(C_pmlr_fit, X, ics, as.integer(q), as.integer(K),
                as.integer(c), as.double(tol), as.integer(maxit),
                as.integer(maxNumRestart), as.integer(replix),
-               as.double(fixthrehsolds), loading, as.double(latentmeans))
+               as.double(fixthrehsolds), loading, as.double(latentmeans), as.integer(verbose))
   structure(list(raw = raw, status_code = raw[length(raw) - 1L],
                  restart_count = raw[length(raw)],
                  n = nrow(X), p = ncol(X), q = q, K = K, c = c),

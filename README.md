@@ -5,7 +5,7 @@ called **from R without installing Julia on the end user's machine**. The
 source code is retained in `julia/source/`; the preparation script adapts the
 module import paths and adds a restart limit to the generated compilation copy.
 
-**Status: experimental. The native build previously succeeded, but the earlier version crashed RStudio during model fitting. Version 0.1.2 runs the model in a separate process and adds a fit-level smoke test. Numerical equivalence is still unvalidated.** The original
+**Status: experimental. The native build previously succeeded, but the earlier version crashed RStudio during model fitting. Version 0.1.3 runs the model in a separate process and adds a fit-level smoke test. Numerical equivalence is still unvalidated.** The original
 algorithms contain a large number of model branches. The initial build targets
 64-bit Linux; Windows and macOS would need separate compiled distributions
 and testing. Do not publish or rely on this package for statistical results
@@ -27,7 +27,7 @@ first. Then execute from the repository root:
 
 ```bash
 ./scripts/build-linux.sh
-R CMD INSTALL PMLCFAEFA_0.1.2.tar.gz
+R CMD INSTALL PMLCFAEFA_0.1.3.tar.gz
 Rscript scripts/smoke.R
 ```
 
@@ -37,12 +37,12 @@ Julia runtime. It may require substantial time, disk, and memory.
 
 ## Installation for an R user without Julia
 
-Transfer `PMLCFAEFA_0.1.2.tar.gz`, generated above or downloaded from the
+Transfer `PMLCFAEFA_0.1.3.tar.gz`, generated above or downloaded from the
 GitHub Actions build artifacts, to a compatible **64-bit Linux** machine.
 Install it using:
 
 ```r
-install.packages("PMLCFAEFA_0.1.2.tar.gz", repos = NULL, type = "source")
+install.packages("PMLCFAEFA_0.1.3.tar.gz", repos = NULL, type = "source")
 library(PMLCFAEFA)
 PMLR_status()
 ```
@@ -64,7 +64,8 @@ ics <- cbind(intercept = 1, x1 = rnorm(60))
 fit <- PMLcfaefa(
   X = X, q = 2, K = 2, c = 4, ics = ics,
   tol = 1e-6, maxit = 100, maxNumRestart = 3,
-  replix = 3, fixthrehsolds = 0, latentmeans = 1
+  replix = 3, fixthrehsolds = 0, latentmeans = 1,
+  verbose = TRUE
 )
 print(fit)
 head(fit$raw)
@@ -117,3 +118,18 @@ is returned to R instead of a potentially infinite loop.
 - PackageCompiler libraries: https://julialang.github.io/PackageCompiler.jl/stable/libs.html
 - PackageCompiler API: https://julialang.github.io/PackageCompiler.jl/stable/refs.html
 - Writing R Extensions: https://cran.r-project.org/doc/manuals/r-release/R-exts.html
+## EM iteration diagnostics
+
+`PMLcfaefa(..., verbose = TRUE)` enables iteration messages. The default
+is `verbose = FALSE`. Each EM iteration reports the composite
+log-likelihood (`logCL`), the actual stopping metric (`delta_stop`),
+its absolute counterpart (`delta_abs`), the Aitken metric
+(`delta_aitken`), tolerance and whether the objective increased.
+The default `latentmeans = 1, fixthrehsolds = 0` branch stops on
+absolute `abs(logCL_current - logCL_previous)`, while other branches
+also consider relative and Aitken differences. The source replaces
+obsolete Optim `f_tol` and `outer_f_tol` settings with supported
+`f_reltol` and `outer_f_reltol` options to suppress repeated warnings.
+
+The native interface has changed. Rebuild and reinstall version 0.1.3;
+the existing v0.1.2 library cannot be used with this interface.

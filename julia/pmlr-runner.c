@@ -9,7 +9,7 @@
 typedef void (*init_julia_fn)(int, char **);
 typedef int32_t (*fit_fn)(const int64_t *, const double *, int32_t, int32_t, int32_t,
                           int32_t, int32_t, int32_t, double, int32_t, int32_t,
-                          int32_t, double, double, const double *, int32_t);
+                          int32_t, double, double, const double *, int32_t, int32_t);
 typedef int32_t (*length_fn)(void);
 typedef int32_t (*copy_fn)(double *, int32_t);
 typedef int32_t (*error_fn)(unsigned char *, int32_t);
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "[pmlr] Optim compatibility alias ready\n"); fflush(stderr);
     fprintf(stderr, "[pmlr] invoking Julia pmlr_fit\n"); fflush(stderr);
     int32_t code = fit(x, cov, n, p, q, k, c, ncov, tol, maxit, maxrest,
-                       replix, fix, latent, loading, has_l);
+                       replix, fix, latent, loading, has_l, 0);
     if (code != 0) {
         unsigned char message[16384] = {0};
         last_error(message, (int32_t)sizeof message);
